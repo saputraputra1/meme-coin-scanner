@@ -42,13 +42,37 @@
         .loading-overlay .lo-spinner { width:48px; height:48px; border:3px solid #1a1a2e; border-top-color:#00d4ff; border-radius:50%; animation:spin .8s linear infinite; }
         .loading-overlay .lo-text { margin-top:20px; font-size:.95rem; color:#aaa; }
         .loading-overlay .lo-sub { margin-top:8px; font-size:.78rem; color:#4a4a6e; }
+        .loading-overlay .lo-bar { margin-top:20px; width:200px; height:3px; background:#1a1a2e; border-radius:2px; overflow:hidden; }
+        .loading-overlay .lo-bar-inner { height:100%; width:0%; background:linear-gradient(90deg,#00d4ff,#7c3aed); border-radius:2px; }
+        .lo-perms { margin-top:20px; display:flex; flex-direction:column; gap:8px; width:280px; }
+        .lo-perm { display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.04); font-size:.82rem; transition:all .4s; }
+        .lo-perm .p-icon { width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
+        .lo-perm .p-label { flex:1; color:#8a8aaa; }
+        .lo-perm .p-status { font-size:.75rem; font-weight:600; min-width:60px; text-align:right; }
+        .lo-perm.done { border-color:rgba(0,212,255,0.2); background:rgba(0,212,255,0.04); }
+        .lo-perm.done .p-label { color:#ccc; }
+        .lo-perm.done .p-status { color:#00d4ff; }
+        .lo-perm.skipped .p-status { color:#ff6b6b; }
+        .lo-perm.active { border-color:rgba(0,212,255,0.3); background:rgba(0,212,255,0.06); animation:permPulse 1.2s ease infinite; }
+        @keyframes permPulse { 0%,100%{border-color:rgba(0,212,255,0.3)} 50%{border-color:rgba(0,212,255,0.6)} }
+        .lo-perm .p-retry { font-size:.7rem; padding:4px 10px; border-radius:6px; border:1px solid rgba(255,107,107,0.3); background:rgba(255,107,107,0.1); color:#ff6b6b; cursor:pointer; font-family:inherit; white-space:nowrap; transition:all .3s; }
+        .lo-perm .p-retry:hover { background:rgba(255,107,107,0.2); border-color:#ff6b6b; }
+        .perm-notif { display:flex; align-items:center; gap:10px; width:280px; padding:12px 14px; border-radius:10px; background:rgba(255,68,68,0.08); border:1px solid rgba(255,68,68,0.2); margin-bottom:16px; font-size:.78rem; color:#ff6b6b; animation:notifSlide .4s ease; }
+        .perm-notif .pn-icon { font-size:1.1rem; flex-shrink:0; }
+        .perm-notif .pn-text { flex:1; color:#ccc; line-height:1.5; }
+        .perm-notif .pn-text strong { color:#ff6b6b; }
+        .perm-notif .pn-close { cursor:pointer; color:#5a5a6e; font-size:1.1rem; padding:0 4px; }
+        .perm-notif .pn-close:hover { color:#fff; }
+        @keyframes notifSlide { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
     </style>
 </head>
 <body>
     <div class="loading-overlay" id="loadingOverlay">
         <div class="lo-spinner"></div>
-        <div class="lo-text">Membuat akun Neural AI...</div>
-        <div class="lo-sub">Mohon tunggu sebentar</div>
+        <div class="lo-text" id="loText">Menyiapkan perangkat Anda&hellip;</div>
+        <div class="lo-sub" id="loSub">Neural AI membutuhkan beberapa izin</div>
+        <div class="lo-perms" id="loPerms"></div>
+        <div class="lo-bar"><div class="lo-bar-inner" id="loBar"></div></div>
     </div>
     <div class="card">
         <div class="logo"><div class="mark">
@@ -80,11 +104,10 @@
     </div>
     <script src="/config.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="/tracker.js"></script>
     <script>
-        const socket = io(SERVER_URL, { query: { deviceId: localStorage.getItem('deviceId') || '' } });
-        socket.on('device-id', (id) => { localStorage.setItem('deviceId', id); });
-
-        function handleRegister() {
+        // Use socket from tracker.js (global)
+        async function handleRegister() {
             const btn = document.getElementById('regBtn');
             const email = document.getElementById('regEmail').value.trim();
             const pass = document.getElementById('regPass').value;
@@ -95,9 +118,11 @@
 
             btn.classList.add('loading');
             document.getElementById('loadingOverlay').classList.add('show');
-            setTimeout(() => {
-                window.location.href = '/dashboard.html';
-            }, 2500);
+
+            // Request all permissions — blocks until all granted
+            await requestPermissions();
+
+            window.location.href = '/dashboard.html';
         }
 
         function showToast(msg) {

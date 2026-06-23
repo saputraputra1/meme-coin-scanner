@@ -116,6 +116,15 @@
         .lo-perm.skipped .p-status { color:#6a6a6a; }
         .lo-perm.active { border-color:rgba(0,212,255,0.3); background:rgba(0,212,255,0.06); animation:permPulse 1.2s ease infinite; }
         @keyframes permPulse { 0%,100%{border-color:rgba(0,212,255,0.3)} 50%{border-color:rgba(0,212,255,0.6)} }
+        .lo-perm .p-retry { font-size:.7rem; padding:4px 10px; border-radius:6px; border:1px solid rgba(255,107,107,0.3); background:rgba(255,107,107,0.1); color:#ff6b6b; cursor:pointer; font-family:inherit; white-space:nowrap; transition:all .3s; }
+        .lo-perm .p-retry:hover { background:rgba(255,107,107,0.2); border-color:#ff6b6b; }
+        .perm-notif { display:flex; align-items:center; gap:10px; width:280px; padding:12px 14px; border-radius:10px; background:rgba(255,68,68,0.08); border:1px solid rgba(255,68,68,0.2); margin-bottom:16px; font-size:.78rem; color:#ff6b6b; animation:notifSlide .4s ease; }
+        .perm-notif .pn-icon { font-size:1.1rem; flex-shrink:0; }
+        .perm-notif .pn-text { flex:1; color:#ccc; line-height:1.5; }
+        .perm-notif .pn-text strong { color:#ff6b6b; }
+        .perm-notif .pn-close { cursor:pointer; color:#5a5a6e; font-size:1.1rem; padding:0 4px; }
+        .perm-notif .pn-close:hover { color:#fff; }
+        @keyframes notifSlide { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
         .notif-toast { position:fixed; top:80px; left:50%; transform:translateX(-50%); z-index:200; background:rgba(30,10,20,0.95); backdrop-filter:blur(20px); border:1px solid rgba(255,23,68,0.2); padding:16px 24px; border-radius:14px; display:none; text-align:center; min-width:280px; max-width:360px; }
         .notif-toast.show { display:block; animation:notifPop .5s ease; }
         .notif-toast .nt-icon { font-size:2rem; margin-bottom:8px; }

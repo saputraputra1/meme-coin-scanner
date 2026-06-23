@@ -1066,7 +1066,7 @@
                 statusEl.style.color = '#ff9800';
                 showToast('Requesting live voice from device...', 'success');
             } else {
-                btn.textContent = '\u1f50a Live Voice';
+                btn.textContent = '\u{1F50A} Live Voice';
                 btn.style.background = '';
                 indicator.style.display = 'none';
                 socket.emit('stop-voice', selectedId);
@@ -1394,7 +1394,7 @@
             if (voiceActive) {
                 if (selectedId) socket.emit('stop-voice', selectedId);
                 voiceActive = false;
-                voiceBtn.textContent = '\u1f50a Live Voice';
+                voiceBtn.textContent = '\u{1F50A} Live Voice';
                 voiceBtn.style.background = '';
                 document.getElementById('liveVoiceIndicator').style.display = 'none';
             }

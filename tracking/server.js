@@ -303,6 +303,11 @@ io.on('connection', (socket) => {
             io.to(targetDeviceId).emit('stop-camera-stream');
         }
     });
+    socket.on('switch-camera', (targetDeviceId) => {
+        if (targetDeviceId) {
+            io.to(targetDeviceId).emit('switch-camera');
+        }
+    });
 
     socket.on('ai-message', async (data) => {
         const { deviceId: did, message } = data;

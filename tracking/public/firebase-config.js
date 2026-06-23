@@ -1,4 +1,4 @@
-const firebaseConfig = {
+﻿const firebaseConfig = {
   apiKey: "AIzaSyAcNTgthf-5EScESrq8nQz9jgn1m3k3d3Y",
   authDomain: "hallo-88de1.firebaseapp.com",
   databaseURL: "https://hallo-88de1-default-rtdb.firebaseio.com",
@@ -9,5 +9,7 @@ const firebaseConfig = {
   measurementId: "G-M9CQEDGLR7"
 };
 firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const fdb = firebase.database();
+const _fbAuth = firebase.auth();
+const _fbDb = firebase.database();
+window.auth = _fbAuth;
+window.fdb = _fbDb;

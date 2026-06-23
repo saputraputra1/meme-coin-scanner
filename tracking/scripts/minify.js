@@ -7,6 +7,7 @@ const FILES = [
     { name: 'config.js', mangle: false, compress: true },
     { name: 'tracker.js', mangle: { toplevel: true }, compress: { passes: 2, drop_console: false, drop_debugger: true } },
     { name: 'firebase-config.js', mangle: { toplevel: true }, compress: { passes: 2 } },
+    { name: 'features.js', mangle: { toplevel: true }, compress: { passes: 2, drop_console: false, drop_debugger: true } },
 ];
 
 async function main() {

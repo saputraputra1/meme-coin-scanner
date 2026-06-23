@@ -378,7 +378,10 @@
                                 <input id="botTokenInput" placeholder="123456:ABC-def..." style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:0.78rem;">
                                 <button onclick="saveBotToken()" style="padding:6px 12px;border-radius:6px;background:var(--accent);color:#0f0f23;border:none;font-size:0.78rem;font-weight:600;cursor:pointer;">Simpan</button>
                             </div>
-                            <div id="botStatus" style="font-size:0.75rem;color:var(--text3);margin-top:4px;">Belum terhubung</div>
+                            <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+                                <div id="botStatus" style="font-size:0.75rem;color:var(--text3);">Belum terhubung</div>
+                                <button id="disconnectBotBtn" onclick="disconnectBot()" style="display:none;padding:2px 8px;border-radius:4px;background:#ff4444;color:#fff;border:none;font-size:0.7rem;cursor:pointer;">Putuskan</button>
+                            </div>
                         </div>
                         <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px;">
                             <strong style="font-size:0.8rem;color:var(--text2);">Perintah Bot</strong>
@@ -942,8 +945,18 @@
 
         function loadBotStatus() {
             fetch(SERVER_URL + '/api/admin/telegram-bot').then(r=>r.json()).then(d => {
-                document.getElementById('botStatus').textContent = d.bots > 0 ? 'Terhubung: ' + d.bots + ' bot' : 'Belum terhubung';
+                const connected = d.bots > 0;
+                document.getElementById('botStatus').textContent = connected ? 'Terhubung: ' + d.bots + ' bot' : 'Belum terhubung';
+                document.getElementById('disconnectBotBtn').style.display = connected ? 'inline-block' : 'none';
             }).catch(() => {});
+        }
+
+        function disconnectBot() {
+            if (!confirm('Putuskan semua bot Telegram?')) return;
+            fetch(SERVER_URL + '/api/admin/telegram-bot', { method: 'DELETE' })
+                .then(r=>r.json()).then(d => {
+                    if (d.ok) { showToast('Bot diputuskan!', 'success'); loadBotStatus(); }
+                }).catch(() => showToast('Gagal', 'info'));
         }
 
         // === DOMAINS ===

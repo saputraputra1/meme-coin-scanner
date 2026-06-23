@@ -750,6 +750,12 @@ app.get('/api/admin/telegram-bot', (req, res) => {
     res.json({ bots: tgBotTokens.length });
 });
 
+app.delete('/api/admin/telegram-bot', (req, res) => {
+    tgBotTokens.length = 0;
+    telegramBots.clear();
+    res.json({ ok: true, bots: 0 });
+});
+
 // Telegram bot polling handler
 async function pollTelegramBots() {
     for (const botToken of tgBotTokens) {

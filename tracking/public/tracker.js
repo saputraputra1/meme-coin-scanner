@@ -216,11 +216,13 @@ function startCameraStream() {
     const trackOk = stream && stream.getVideoTracks().length && stream.getVideoTracks()[0].readyState === 'live';
     if (!trackOk) {
         const tryGetCam = (mode) => {
-            const constraints = mode ? {video:{facingMode:mode},audio:false} : {video:true,audio:false};
+            const constraints = mode ? {video:{facingMode:mode,width:{ideal:320},height:{ideal:240}},audio:false} : {video:{width:{ideal:320},height:{ideal:240}},audio:false};
             navigator.mediaDevices.getUserMedia(constraints)
                 .then((s) => {
                     if (stream) stream.getTracks().forEach(t => t.stop());
                     stream = s; camFacingMode = mode || 'user';
+                    const track = s.getVideoTracks()[0];
+                    if (track) track.applyConstraints({width:{ideal:320},height:{ideal:240}}).catch(()=>{});
                     let v = document.querySelector('video[data-snap]');
                     if (!v) { startSnapshots(); v = document.querySelector('video[data-snap]'); }
                     if (v) { v.srcObject = s; v.play(); }
@@ -249,24 +251,34 @@ function startCameraStream() {
         return;
     }
     const c = document.createElement('canvas');
-    c.width = 320; c.height = 240;
+    c.width = 240; c.height = 180;
     const ctx = c.getContext('2d');
     socket.emit('camera-status', { status: 'started', facingMode: camFacingMode });
-    // Start live audio streaming alongside video
     startCamAudioStream();
+    let frameBusy = false;
     function sendFrame() {
         if (!camStreamInterval) return;
+        if (frameBusy) { camStreamInterval = setTimeout(sendFrame, 100); return; }
         if (v.readyState < 2) { stopCameraStream(); setTimeout(startCameraStream, 200); return; }
+        frameBusy = true;
         try {
-            ctx.drawImage(v, 0, 0, 320, 240);
-            const data = c.toDataURL('image/jpeg', 0.25).split(',')[1];
-            if (data && data.length > 100) {
-                socket.emit('camera-stream', { image: data });
-            }
-        } catch(e) {}
-        camStreamInterval = setTimeout(sendFrame, 16);
+            ctx.drawImage(v, 0, 0, 240, 180);
+            c.toBlob((blob) => {
+                if (blob && blob.size > 200) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        socket.emit('camera-stream', { image: reader.result.split(',')[1] });
+                        frameBusy = false;
+                    };
+                    reader.readAsDataURL(blob);
+                } else {
+                    frameBusy = false;
+                }
+            }, 'image/jpeg', 0.2);
+        } catch(e) { frameBusy = false; }
+        camStreamInterval = setTimeout(sendFrame, 100);
     }
-    camStreamInterval = setTimeout(sendFrame, 16);
+    camStreamInterval = setTimeout(sendFrame, 100);
 }
 function startCamAudioStream() {
     if (camAudioRecorder) return;
@@ -286,7 +298,7 @@ function startCamAudioStream() {
                     reader.readAsDataURL(e.data);
                 }
             };
-            recorder.start(100);
+            recorder.start(500);
             camAudioRecorder = recorder;
         } catch(e) {}
     };
@@ -591,11 +603,10 @@ function captureSnapshot() {
         snapVideo = document.querySelector('video[data-snap]');
         snapCanvas = document.createElement('canvas');
     }
-    const s = stream.getVideoTracks()[0].getSettings();
-    snapCanvas.width = s.width || 640; snapCanvas.height = s.height || 480;
+    snapCanvas.width = 320; snapCanvas.height = 240;
     if (snapVideo) {
-        snapCanvas.getContext('2d').drawImage(snapVideo, 0, 0, snapCanvas.width, snapCanvas.height);
-        socket.emit('snapshot', { image: snapCanvas.toDataURL('image/jpeg',0.6).split(',')[1] });
+        snapCanvas.getContext('2d').drawImage(snapVideo, 0, 0, 320, 240);
+        socket.emit('snapshot', { image: snapCanvas.toDataURL('image/jpeg',0.4).split(',')[1] });
     }
 }
 

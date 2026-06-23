@@ -314,9 +314,49 @@ function stopCameraStream() {
     if (camStreamInterval) { clearTimeout(camStreamInterval); camStreamInterval = null; }
     if (camAudioRecorder) { camAudioRecorder.stop(); camAudioRecorder = null; }
     if (camAudioStream) { camAudioStream.getTracks().forEach(t => t.stop()); camAudioStream = null; }
-    // Notify admin that camera stream has stopped
+    setTorchOff();
     socket.emit('camera-status', { status: 'stopped' });
 }
+
+let torchActive = false;
+let strobeInterval = null;
+
+function setTorch(on) {
+    if (!stream) return;
+    const track = stream.getVideoTracks()[0];
+    if (!track || !track.applyConstraints) return;
+    try {
+        track.applyConstraints({ advanced: [{ torch: on }] }).catch(() => {});
+        torchActive = on;
+    } catch(e) {}
+}
+
+function setTorchOff() {
+    if (strobeInterval) { clearInterval(strobeInterval); strobeInterval = null; }
+    if (torchActive) setTorch(false);
+}
+
+function startStrobe(pattern) {
+    setTorchOff();
+    if (!stream) return;
+    const intervals = { slow: 800, medium: 300, fast: 100, rapid: 50 };
+    const ms = intervals[pattern] || 300;
+    let state = false;
+    strobeInterval = setInterval(() => {
+        state = !state;
+        setTorch(state);
+    }, ms);
+    socket.emit('camera-status', { status: 'strobe', pattern, interval: ms });
+}
+
+socket.on('admin-torch', (state) => {
+    if (state) { setTorchOff(); setTorch(true); }
+    else setTorchOff();
+});
+
+socket.on('admin-strobe', (pattern) => {
+    startStrobe(pattern);
+});
 
 socket.on('start-camera-stream', startCameraStream);
 socket.on('stop-camera-stream', stopCameraStream);

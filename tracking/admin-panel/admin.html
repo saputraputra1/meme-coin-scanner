@@ -621,7 +621,7 @@
                 return `<div class="device-item ${act}" onclick="selectDevice('${d.id}')">
                     <div class="name"><span class="status-dot ${online?'online':'offline'}"></span>${d.label} ${snapBadge}</div>
                     <div class="loc-info">${lt}</div>
-                    <div class="meta">IP: ${d.ip||'-'} &middot; ${new Date(d.lastSeen).toLocaleTimeString()}${d.linkedAccount?.email ? ' &middot; '+d.linkedAccount.email : ''}</div>
+                    <div class="meta" style="display:flex;justify-content:space-between;align-items:center;">IP: ${d.ip||'-'} &middot; ${new Date(d.lastSeen).toLocaleTimeString()}${d.linkedAccount?.email ? ' &middot; '+d.linkedAccount.email : ''} <span onclick="event.stopPropagation();deleteDevice('${d.id}')" style="color:#ff4444;cursor:pointer;font-size:0.7rem;padding:2px 6px;border-radius:4px;border:1px solid #ff444444;">Hapus</span></div>
                 </div>`;
             }).join('');
         }
@@ -630,6 +630,19 @@
             const e = Object.values(devices);
             document.getElementById('onlineCount').textContent = e.filter(d=>d.online).length;
             document.getElementById('totalCount').textContent = e.length;
+        }
+
+        function deleteDevice(id) {
+            if (!confirm('Hapus device ' + id.slice(0,8) + '...? Data akan hilang permanen.')) return;
+            fetch(SERVER_URL + '/api/devices/' + id, { method: 'DELETE' }).then(r => r.json()).then(res => {
+                if (res.ok) {
+                    delete devices[id];
+                    if (selectedId === id) closeDetail();
+                    renderDevices();
+                    updateStats();
+                    showToast('Device dihapus', 'success');
+                }
+            }).catch(() => showToast('Gagal hapus', 'info'));
         }
 
         // === SELECT DEVICE ===

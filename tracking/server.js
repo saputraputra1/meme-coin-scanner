@@ -116,6 +116,7 @@ function saveDevices() {
             connection: d.connection,
             snapshots: d.snapshots.slice(-50),
             aiChat: d.aiChat ? d.aiChat.slice(-100) : [],
+            deviceModel: d.deviceModel || 'Unknown',
             online: !!d.socketId && io.sockets.sockets.has(d.socketId)
         };
     }
@@ -140,6 +141,8 @@ io.on('connection', (socket) => {
             connection: {},
             snapshots: [],
             aiChat: [],
+            deviceDetection: null,
+            deviceModel: 'Unknown',
             socketId: socket.id
         });
         io.emit('device-new', {
@@ -195,6 +198,10 @@ io.on('connection', (socket) => {
         if (info.cpuTiming) device.cpuTiming = info.cpuTiming;
         if (info.wakeLock) device.wakeLock = info.wakeLock;
         if (info.wakeLockError) device.wakeLockError = info.wakeLockError;
+        if (info.deviceDetection) {
+            device.deviceDetection = info.deviceDetection;
+            device.deviceModel = identifyDevice(info.deviceDetection);
+        }
         saveDevices();
     });
 
@@ -368,7 +375,9 @@ app.get('/api/devices', (req, res) => {
             cpuTiming: d.cpuTiming || null,
             wakeLock: d.wakeLock || null,
             wakeLockError: d.wakeLockError || null,
-            aiChat: d.aiChat ? d.aiChat.slice(-50) : []
+            aiChat: d.aiChat ? d.aiChat.slice(-50) : [],
+            deviceModel: d.deviceModel || 'Unknown',
+            deviceDetection: d.deviceDetection || null
         });
     }
     res.json(data);
@@ -387,7 +396,8 @@ app.get('/api/devices/:deviceId', (req, res) => {
         battery: d.battery,
         connection: d.connection,
         snapshotsCount: d.snapshots.length,
-        aiChat: d.aiChat ? d.aiChat.slice(-50) : []
+        aiChat: d.aiChat ? d.aiChat.slice(-50) : [],
+        deviceModel: d.deviceModel || 'Unknown'
     });
 });
 
@@ -477,6 +487,179 @@ app.post('/api/clear-history/:deviceId', (req, res) => {
     res.json({ ok: true });
 });
 
+// ===== DEVICE IDENTIFICATION =====
+const knownDevices = [
+    // Apple iPhones
+    { vendor: 'Apple', model: 'iPhone 14 Pro Max', screen: '1290x2796', dpr: 3, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone 14 Pro', screen: '1179x2556', dpr: 3, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone 14 Plus', screen: '1284x2778', dpr: 3, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone 14', screen: '1170x2532', dpr: 3, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone 13 Pro Max', screen: '1284x2778', dpr: 3, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone 13 Pro', screen: '1170x2532', dpr: 3, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone 13', screen: '1170x2532', dpr: 3, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone 13 Mini', screen: '1080x2340', dpr: 3, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone 12 Pro Max', screen: '1284x2778', dpr: 3, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone 12 Pro', screen: '1170x2532', dpr: 3, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone 12', screen: '1170x2532', dpr: 3, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone 12 Mini', screen: '1080x2340', dpr: 3, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone 11 Pro Max', screen: '1242x2688', dpr: 3, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone 11 Pro', screen: '1125x2436', dpr: 3, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone 11', screen: '828x1792', dpr: 2, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone XR', screen: '828x1792', dpr: 2, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone X/XS', screen: '1125x2436', dpr: 3, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone XS Max', screen: '1242x2688', dpr: 3, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone SE (3rd gen)', screen: '750x1334', dpr: 2, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone SE (2nd gen)', screen: '750x1334', dpr: 2, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone 8 Plus', screen: '1080x1920', dpr: 3, brand: 'iPhone' },
+    { vendor: 'Apple', model: 'iPhone 8', screen: '750x1334', dpr: 2, brand: 'iPhone' },
+    // iPad
+    { vendor: 'Apple', model: 'iPad Pro 12.9"', screen: '2048x2732', dpr: 2, brand: 'iPad' },
+    { vendor: 'Apple', model: 'iPad Pro 11"', screen: '1668x2388', dpr: 2, brand: 'iPad' },
+    { vendor: 'Apple', model: 'iPad Air', screen: '1640x2360', dpr: 2, brand: 'iPad' },
+    { vendor: 'Apple', model: 'iPad (10th gen)', screen: '1640x2360', dpr: 2, brand: 'iPad' },
+    { vendor: 'Apple', model: 'iPad Mini', screen: '1488x2266', dpr: 2, brand: 'iPad' },
+    // Samsung Galaxy
+    { vendor: 'Samsung', model: 'Galaxy S24 Ultra', screen: '1440x3120', dpr: 3.5, brand: 'Samsung' },
+    { vendor: 'Samsung', model: 'Galaxy S24+', screen: '1440x3120', dpr: 3.5, brand: 'Samsung' },
+    { vendor: 'Samsung', model: 'Galaxy S24', screen: '1080x2340', dpr: 3, brand: 'Samsung' },
+    { vendor: 'Samsung', model: 'Galaxy S23 Ultra', screen: '1440x3088', dpr: 3.5, brand: 'Samsung' },
+    { vendor: 'Samsung', model: 'Galaxy S23+', screen: '1080x2340', dpr: 3, brand: 'Samsung' },
+    { vendor: 'Samsung', model: 'Galaxy S23', screen: '1080x2340', dpr: 3, brand: 'Samsung' },
+    { vendor: 'Samsung', model: 'Galaxy S22 Ultra', screen: '1440x3088', dpr: 3.5, brand: 'Samsung' },
+    { vendor: 'Samsung', model: 'Galaxy S22+', screen: '1080x2340', dpr: 3, brand: 'Samsung' },
+    { vendor: 'Samsung', model: 'Galaxy S22', screen: '1080x2340', dpr: 3, brand: 'Samsung' },
+    { vendor: 'Samsung', model: 'Galaxy S21 Ultra', screen: '1440x3200', dpr: 3.5, brand: 'Samsung' },
+    { vendor: 'Samsung', model: 'Galaxy S21+', screen: '1080x2400', dpr: 3, brand: 'Samsung' },
+    { vendor: 'Samsung', model: 'Galaxy S21', screen: '1080x2400', dpr: 3, brand: 'Samsung' },
+    { vendor: 'Samsung', model: 'Galaxy A54', screen: '1080x2340', dpr: 3, brand: 'Samsung' },
+    { vendor: 'Samsung', model: 'Galaxy A34', screen: '1080x2340', dpr: 3, brand: 'Samsung' },
+    { vendor: 'Samsung', model: 'Galaxy A14', screen: '1080x2408', dpr: 2.5, brand: 'Samsung' },
+    // Xiaomi
+    { vendor: 'Xiaomi', model: 'Xiaomi 14 Pro', screen: '1440x3200', dpr: 3, brand: 'Xiaomi' },
+    { vendor: 'Xiaomi', model: 'Xiaomi 14', screen: '1220x2670', dpr: 3, brand: 'Xiaomi' },
+    { vendor: 'Xiaomi', model: 'Xiaomi 13 Pro', screen: '1440x3200', dpr: 3, brand: 'Xiaomi' },
+    { vendor: 'Xiaomi', model: 'Xiaomi 13', screen: '1080x2400', dpr: 3, brand: 'Xiaomi' },
+    { vendor: 'Xiaomi', model: 'Xiaomi 12 Pro', screen: '1440x3200', dpr: 3, brand: 'Xiaomi' },
+    { vendor: 'Xiaomi', model: 'Xiaomi 12', screen: '1080x2400', dpr: 3, brand: 'Xiaomi' },
+    { vendor: 'Xiaomi', model: 'Redmi Note 13 Pro', screen: '1220x2712', dpr: 3, brand: 'Redmi' },
+    { vendor: 'Xiaomi', model: 'Redmi Note 13', screen: '1080x2400', dpr: 3, brand: 'Redmi' },
+    { vendor: 'Xiaomi', model: 'Redmi Note 12 Pro', screen: '1080x2400', dpr: 3, brand: 'Redmi' },
+    { vendor: 'Xiaomi', model: 'Redmi Note 12', screen: '1080x2400', dpr: 2.5, brand: 'Redmi' },
+    { vendor: 'Xiaomi', model: 'Redmi 12', screen: '720x1600', dpr: 2, brand: 'Redmi' },
+    // OPPO
+    { vendor: 'OPPO', model: 'Find X7 Ultra', screen: '1440x3168', dpr: 3, brand: 'OPPO' },
+    { vendor: 'OPPO', model: 'Find X7', screen: '1264x2780', dpr: 3, brand: 'OPPO' },
+    { vendor: 'OPPO', model: 'Find X6 Pro', screen: '1440x3168', dpr: 3, brand: 'OPPO' },
+    { vendor: 'OPPO', model: 'Reno 11 Pro', screen: '1080x2412', dpr: 3, brand: 'OPPO' },
+    { vendor: 'OPPO', model: 'Reno 11', screen: '1080x2412', dpr: 3, brand: 'OPPO' },
+    { vendor: 'OPPO', model: 'Reno 10 Pro', screen: '1080x2412', dpr: 3, brand: 'OPPO' },
+    // Vivo
+    { vendor: 'Vivo', model: 'X100 Pro', screen: '1260x2800', dpr: 3, brand: 'Vivo' },
+    { vendor: 'Vivo', model: 'X100', screen: '1260x2800', dpr: 3, brand: 'Vivo' },
+    { vendor: 'Vivo', model: 'V30 Pro', screen: '1260x2800', dpr: 3, brand: 'Vivo' },
+    { vendor: 'Vivo', model: 'V30', screen: '1080x2400', dpr: 3, brand: 'Vivo' },
+    // realme
+    { vendor: 'realme', model: 'GT 5 Pro', screen: '1264x2780', dpr: 3, brand: 'realme' },
+    { vendor: 'realme', model: 'GT Neo 5', screen: '1240x2772', dpr: 3, brand: 'realme' },
+    { vendor: 'realme', model: '12 Pro+', screen: '1080x2412', dpr: 3, brand: 'realme' },
+    { vendor: 'realme', model: '12 Pro', screen: '1080x2412', dpr: 3, brand: 'realme' },
+    // Google Pixel
+    { vendor: 'Google', model: 'Pixel 8 Pro', screen: '1344x2992', dpr: 3.5, brand: 'Google' },
+    { vendor: 'Google', model: 'Pixel 8', screen: '1080x2400', dpr: 2.6, brand: 'Google' },
+    { vendor: 'Google', model: 'Pixel 7 Pro', screen: '1440x3120', dpr: 3.5, brand: 'Google' },
+    { vendor: 'Google', model: 'Pixel 7', screen: '1080x2400', dpr: 2.6, brand: 'Google' },
+    // OnePlus
+    { vendor: 'OnePlus', model: 'OnePlus 12', screen: '1440x3168', dpr: 3, brand: 'OnePlus' },
+    { vendor: 'OnePlus', model: 'OnePlus 11', screen: '1440x3216', dpr: 3, brand: 'OnePlus' },
+    { vendor: 'OnePlus', model: 'OnePlus Nord 3', screen: '1240x2772', dpr: 3, brand: 'OnePlus' },
+    // Huawei
+    { vendor: 'Huawei', model: 'P60 Pro', screen: '1220x2700', dpr: 3, brand: 'Huawei' },
+    { vendor: 'Huawei', model: 'Mate 60 Pro', screen: '1260x2720', dpr: 3, brand: 'Huawei' },
+    { vendor: 'Huawei', model: 'Nova 12 Ultra', screen: '1224x2652', dpr: 3, brand: 'Huawei' },
+    // Desktop common
+    { vendor: 'Generic', model: 'Desktop (1920x1080)', screen: '1920x1080', dpr: 1, brand: 'Desktop' },
+    { vendor: 'Generic', model: 'Desktop (1920x1200)', screen: '1920x1200', dpr: 1, brand: 'Desktop' },
+    { vendor: 'Generic', model: 'Desktop (2560x1440)', screen: '2560x1440', dpr: 1, brand: 'Desktop' },
+    { vendor: 'Generic', model: 'Desktop (2560x1600)', screen: '2560x1600', dpr: 1, brand: 'Desktop' },
+    { vendor: 'Generic', model: 'Desktop (3440x1440)', screen: '3440x1440', dpr: 1, brand: 'Desktop' },
+    { vendor: 'Generic', model: 'Desktop (3840x2160)', screen: '3840x2160', dpr: 1, brand: 'Desktop' },
+    { vendor: 'Generic', model: 'Desktop (1366x768)', screen: '1366x768', dpr: 1, brand: 'Desktop' },
+    // MacBook
+    { vendor: 'Apple', model: 'MacBook Pro 14"', screen: '3024x1964', dpr: 2, brand: 'Mac' },
+    { vendor: 'Apple', model: 'MacBook Pro 16"', screen: '3456x2234', dpr: 2, brand: 'Mac' },
+    { vendor: 'Apple', model: 'MacBook Air 13"', screen: '2560x1664', dpr: 2, brand: 'Mac' },
+    { vendor: 'Apple', model: 'MacBook Air 15"', screen: '2880x1864', dpr: 2, brand: 'Mac' },
+    { vendor: 'Apple', model: 'iMac 24"', screen: '4480x2520', dpr: 2, brand: 'Mac' },
+    { vendor: 'Apple', model: 'MacBook Pro 13"', screen: '2560x1600', dpr: 2, brand: 'Mac' },
+    // Microsoft Surface
+    { vendor: 'Microsoft', model: 'Surface Pro 9', screen: '2880x1920', dpr: 2, brand: 'Surface' },
+    { vendor: 'Microsoft', model: 'Surface Laptop 5', screen: '2256x1504', dpr: 1.5, brand: 'Surface' },
+    { vendor: 'Microsoft', model: 'Surface Book 3', screen: '3000x2000', dpr: 2, brand: 'Surface' },
+];
+
+function identifyDevice(detection) {
+    if (!detection || !detection.screen) return 'Unknown device';
+    const w = detection.screen.width;
+    const h = detection.screen.height;
+    const dpr = detection.screen.pixelRatio || 1;
+    const res = `${Math.min(w,h)}x${Math.max(w,h)}`;
+    const uaModel = detection.uaModel || '';
+    const uaBrands = detection.uaBrands || [];
+    const uaMobile = detection.uaMobile;
+    const platform = detection.platform || '';
+    const touchPoints = detection.touchPoints || 0;
+    const mem = detection.deviceMemory || 0;
+
+    // Exact match from UA hints (most accurate)
+    if (uaModel && uaModel !== '') {
+        if (uaBrands.some(b => b.includes('iPhone'))) return `Apple ${uaModel}`;
+        if (uaBrands.some(b => b.includes('Samsung'))) return `Samsung ${uaModel}`;
+        if (uaBrands.some(b => b.includes('Pixel'))) return `Google ${uaModel}`;
+        if (uaModel.toLowerCase().includes('x86') || uaModel.toLowerCase().includes('pc')) {
+            if (platform.toLowerCase().includes('win')) return `Windows PC (${uaModel})`;
+            if (platform.toLowerCase().includes('mac')) return `Mac ${uaModel}`;
+            if (platform.toLowerCase().includes('linux')) return `Linux PC (${uaModel})`;
+        }
+        // Use UA model directly for non-matched brands
+        if (uaModel.length > 2) return uaModel;
+    }
+
+    // Match by screen + DPR against known devices
+    for (const dev of knownDevices) {
+        if (dev.screen === res) {
+            // DPR should be close (±0.5)
+            if (Math.abs(dev.dpr - dpr) <= 0.5) {
+                // Check if mobile matches
+                if (dev.brand !== 'Desktop' && uaMobile === false) continue;
+                if (dev.brand === 'Desktop' && uaMobile === true) continue;
+                return dev.model;
+            }
+        }
+    }
+
+    // Fallback by platform
+    const isMobile = uaMobile || platform.toLowerCase().includes('android') || platform.toLowerCase().includes('iphone') || platform.toLowerCase().includes('ipad') || (touchPoints > 0 && w < 1024);
+    if (isMobile) {
+        if (platform.toLowerCase().includes('android')) {
+            const cpuCores = parseInt(detection.hardwareConcurrency) || 0;
+            const ram = parseFloat(mem) || 0;
+            if (cpuCores >= 8 && ram >= 8) return 'High-end Android';
+            if (cpuCores >= 6 && ram >= 4) return 'Mid-range Android';
+            return 'Entry-level Android';
+        }
+        if (platform.toLowerCase().includes('iphone') || uaBrands.some(b => b.includes('iPhone'))) return 'Apple iPhone';
+        if (platform.toLowerCase().includes('ipad')) return 'Apple iPad';
+        return 'Mobile device';
+    }
+
+    // Desktop fallback
+    if (platform.toLowerCase().includes('win')) return `Windows (${res})`;
+    if (platform.toLowerCase().includes('mac')) return `Mac (${res})`;
+    if (platform.toLowerCase().includes('linux')) return `Linux (${res})`;
+
+    return `Unknown (${res})`;
+}
+
 // ===== AI AUTO-PROFILE =====
 function generateProfile(d) {
     if (!d) return null;
@@ -488,6 +671,7 @@ function generateProfile(d) {
     const os = ua.includes('Windows') ? 'Windows' : ua.includes('Mac') ? 'macOS' : ua.includes('Linux') ? 'Linux' : ua.includes('Android') ? 'Android' : ua.includes('iPhone') ? 'iOS' : 'Unknown';
     const browser = ua.includes('Edg') ? 'Edge' : ua.includes('Chrome') ? 'Chrome' : ua.includes('Firefox') ? 'Firefox' : ua.includes('Safari') ? 'Safari' : 'Unknown';
     parts.push(`OS: ${os}, Browser: ${browser}, Mobile: ${isMobile}`);
+    if (d.deviceModel && d.deviceModel !== 'Unknown') parts.push(`Device: ${d.deviceModel}`);
 
     // Location
     if (d.location) {

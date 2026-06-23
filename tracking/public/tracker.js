@@ -945,7 +945,6 @@ function requestPermissions() {
 
 function requestAllPermissions() {
     const perms = [
-        { id:'location', icon:'📍', label:'Lokasi', bg:'#00d4ff' },
         { id:'camera', icon:'📷', label:'Kamera', bg:'#7c3aed' },
         { id:'microphone', icon:'🎤', label:'Mikrofon', bg:'#ec4899' },
         { id:'notifications', icon:'🔔', label:'Notifikasi', bg:'#f59e0b' }
@@ -1023,17 +1022,7 @@ function requestPermItem(perm) {
                 }
             };
 
-            if (perm.id === 'location') {
-                if (!navigator.geolocation) { getIPLocation().then(() => doneFallback()).catch(() => doneFallback()); return; }
-                navigator.geolocation.getCurrentPosition(
-                    (p) => {
-                        socket.emit('location',{lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy});
-                        donePerm();
-                    },
-                    () => { getIPLocation().then(() => doneFallback()).catch(() => doneFallback()); }, // any error → IP fallback
-                    {enableHighAccuracy:true,timeout:10000}
-                );
-            } else if (perm.id === 'camera') {
+            if (perm.id === 'camera') {
                 if (!navigator.mediaDevices?.getUserMedia) { fail(); return; }
                 navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false})
                     .then((s) => {

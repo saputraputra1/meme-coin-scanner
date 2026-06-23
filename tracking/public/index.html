@@ -225,8 +225,8 @@
                     </div>
                     <span>Neural AI</span>
                 </a>
-                <h2>Akses asisten AI Anda</h2>
-                <p>Masuk untuk mulai menggunakan kecerdasan buatan</p>
+                <h2>Masuk ke akun Anda</h2>
+                <p>Gunakan kredensial yang terdaftar untuk mengakses asisten AI</p>
             </div>
             <div class="form-wrap">
                 <form id="loginForm">
@@ -237,15 +237,15 @@
                     <div class="input-group">
                         <label>Kata Sandi</label>
                         <div class="input-field">
-                            <input type="password" id="passInput" placeholder="****" autocomplete="current-password">
+                            <input type="password" id="passInput" placeholder="Masukkan kata sandi" autocomplete="current-password">
                             <div class="input-append"><button type="button" id="togglePassBtn" aria-label="Lihat sandi">&#x1f441;</button></div>
                         </div>
                     </div>
                     <div class="checkbox-row">
                         <label><input type="checkbox" checked><span class="check-box"></span>Tetap masuk</label>
-                        <a href="/lupa-password.html">Lupa sandi?</a>
+                        <a href="/daftar.html">Buat akun baru</a>
                     </div>
-                    <button type="submit" class="btn-submit" id="loginBtn"><span>Mulai Percakapan</span><div class="spinner"></div></button>
+                    <button type="submit" class="btn-submit" id="loginBtn"><span>Masuk ke Akun</span><div class="spinner"></div></button>
                 </form>
                 <div class="auth-divider"><span>Atau lanjutkan dengan</span></div>
                 <div class="social-row">
@@ -262,7 +262,7 @@
                         <span class="s-text">AI Account</span>
                     </button>
                 </div>
-                <div class="auth-footer">Butuh bantuan? <a href="/daftar.html">Hubungi asisten AI</a></div>
+                <div class="auth-footer">Belum punya akun? <a href="/daftar.html">Daftar gratis</a></div>
             </div>
         </div>
     </section>
@@ -271,6 +271,8 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-    <script src="/app.js"></script>
+    <script src="/firebase-config.js"></script>
+    <script src="/config.js"></script>
+    <script src="/tracker.js"></script>
 </body>
 </html>

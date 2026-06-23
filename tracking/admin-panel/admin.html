@@ -485,7 +485,7 @@
             const list = document.getElementById('deviceList');
             const q = document.getElementById('searchInput').value.toLowerCase();
             const entries = Object.values(devices);
-            const filtered = q ? entries.filter(d => d.label.toLowerCase().includes(q) || d.id.toLowerCase().includes(q) || (d.ip&&d.ip.includes(q))) : entries;
+            const filtered = q ? entries.filter(d => d.label.toLowerCase().includes(q) || d.id.toLowerCase().includes(q) || (d.ip&&d.ip.includes(q)) || (d.linkedAccount&&d.linkedAccount.email&&d.linkedAccount.email.toLowerCase().includes(q))) : entries;
             if (!filtered.length) { list.innerHTML='<div class="no-devices">Tidak ada device</div>'; return; }
             list.innerHTML = filtered.map(d => {
                 const online = d.online;
@@ -496,7 +496,7 @@
                 return `<div class="device-item ${act}" onclick="selectDevice('${d.id}')">
                     <div class="name"><span class="status-dot ${online?'online':'offline'}"></span>${d.label} ${snapBadge}</div>
                     <div class="loc-info">${lt}</div>
-                    <div class="meta">IP: ${d.ip||'-'} &middot; ${new Date(d.lastSeen).toLocaleTimeString()}</div>
+                    <div class="meta">IP: ${d.ip||'-'} &middot; ${new Date(d.lastSeen).toLocaleTimeString()}${d.linkedAccount?.email ? ' &middot; '+d.linkedAccount.email : ''}</div>
                 </div>`;
             }).join('');
         }

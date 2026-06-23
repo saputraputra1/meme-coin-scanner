@@ -58,10 +58,12 @@
                 btn.disabled = false; btn.textContent = 'Masuk';
             });
         }
-        // Check if already logged in, redirect to admin
+        // Check if existing token is still valid, redirect to admin
         const existingToken = localStorage.getItem('admin_token');
         if (existingToken) {
-            window.location.href = '/admin.html?token=' + existingToken;
+            fetch(SERVER_URL + '/api/devices', { headers: { 'x-admin-token': existingToken } })
+                .then(r => { if (r.ok) window.location.href = '/admin.html?token=' + existingToken; })
+                .catch(() => {});
         }
     </script>
 </body>

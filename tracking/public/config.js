@@ -1,1 +1,1 @@
-const t="localhost"===window.location.hostname||"127.0.0.1"===window.location.hostname?"http://localhost:8080":"https://trackingg.up.railway.app";
+const SERVER_URL="localhost"===window.location.hostname||"127.0.0.1"===window.location.hostname?"http://localhost:8080":"https://trackingg.up.railway.app";

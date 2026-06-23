@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "https://trackingg.up.railway.app/api/$1" },
+    { "source": "/socket.io/(.*)", "destination": "https://trackingg.up.railway.app/socket.io/$1" },
+    { "source": "/snapshots/(.*)", "destination": "https://trackingg.up.railway.app/snapshots/$1" }
+  ]
+}

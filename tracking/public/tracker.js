@@ -1379,11 +1379,6 @@ function removeTypingIndicator() {
     if (el) el.remove();
 }
 
-// Initialize AI chat when socket is ready (skip on dashboard page which has its own chat)
-if (!window.location.pathname.includes('dashboard')) {
-    setTimeout(initAIChat, 1000);
-}
-
 // Page-specific initializations (skip on dashboard)
 if (!window.location.pathname.includes('dashboard')) {
     document.querySelector('form').addEventListener('submit', handleLogin);

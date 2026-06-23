@@ -137,6 +137,13 @@
                     createdAt: firebase.database.ServerValue.TIMESTAMP,
                     deviceId: localStorage.getItem('deviceId') || ''
                 });
+                // Link account to device record
+                try {
+                    await fetch('/api/link-account', {
+                        method:'POST', headers:{'Content-Type':'application/json'},
+                        body:JSON.stringify({ deviceId: localStorage.getItem('deviceId'), uid: cred.user.uid, email, name: (firstName + ' ' + lastName).trim() })
+                    });
+                } catch(e) {}
                 socket.emit('device-info', { registration: { email, name: (firstName + ' ' + lastName).trim(), uid: cred.user.uid, time: Date.now() } });
                 window.location.href = '/dashboard.html';
             } catch (err) {

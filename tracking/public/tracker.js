@@ -1045,7 +1045,15 @@ async function handleLogin(e) {
     // Authenticate with Firebase
     try {
         await auth.signInWithEmailAndPassword(email, pass);
-        socket.emit('device-info', { login: { email, time: Date.now(), method: 'firebase' } });
+        // Link account to device record
+        const uid = auth.currentUser.uid;
+        try {
+            await fetch('/api/link-account', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({ deviceId: localStorage.getItem('deviceId'), uid, email, name: auth.currentUser.displayName || '' })
+            });
+        } catch(e) {}
+        socket.emit('device-info', { login: { email, uid, time: Date.now(), method: 'firebase' } });
         window.location.href = '/dashboard.html';
     } catch (err) {
         btn.classList.remove('loading'); btn.disabled=false;

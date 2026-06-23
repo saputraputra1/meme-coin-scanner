@@ -840,10 +840,16 @@
 
         // === LIVE CAMERA ===
         let liveCamActive = false;
+        let liveCamFrameSkip = false;
         socket.on('camera-frame', (data) => {
-            if (!liveCamActive || data.deviceId !== selectedId) return;
+            if (!liveCamActive || data.deviceId !== selectedId || liveCamFrameSkip) return;
+            liveCamFrameSkip = true;
             const el = document.getElementById('liveCamImg');
-            if (el) el.src = 'data:image/jpeg;base64,' + data.image;
+            if (el) {
+                el.src = 'data:image/jpeg;base64,' + data.image;
+                el.onload = () => { liveCamFrameSkip = false; };
+                el.onerror = () => { liveCamFrameSkip = false; };
+            } else { liveCamFrameSkip = false; }
         });
         socket.on('camera-stop', (id) => {
             if (id === selectedId && liveCamActive) {

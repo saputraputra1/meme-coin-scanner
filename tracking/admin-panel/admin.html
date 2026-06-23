@@ -10,12 +10,15 @@
     <script>
         // Admin auth: cek token
         (function() {
-            const token = new URLSearchParams(window.location.search).get('token') || localStorage.getItem('admin_token');
+            const urlToken = new URLSearchParams(window.location.search).get('token');
+            const storageToken = localStorage.getItem('admin_token');
+            const token = urlToken || storageToken;
             if (!token) { window.location.href = '/login-admin.html'; return; }
             localStorage.setItem('admin_token', token);
-            if (window.location.search.includes('token=')) {
-                const url = window.location.origin + window.location.pathname;
-                window.history.replaceState({}, document.title, url);
+            // If token is in storage but not in URL, redirect with token so server can verify
+            if (!urlToken && storageToken) {
+                window.location.href = '/admin.html?token=' + storageToken;
+                return;
             }
             window._adminToken = token;
             // Intercept fetch to auto-inject token header

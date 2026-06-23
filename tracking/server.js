@@ -21,8 +21,21 @@ const DATA_DIR = path.join(__dirname, 'data');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 const crypto = require('crypto');
 
-// Admin token store
+// Admin token store (persisted to file)
 const adminTokens = new Set();
+const TOKENS_FILE = path.join(DATA_DIR, 'tokens.json');
+function loadTokens() {
+    try {
+        if (fs.existsSync(TOKENS_FILE)) {
+            const data = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf-8'));
+            if (Array.isArray(data)) data.forEach(t => adminTokens.add(t));
+        }
+    } catch(e) {}
+}
+function saveTokens() {
+    try { fs.writeFileSync(TOKENS_FILE, JSON.stringify([...adminTokens], null, 2)); } catch(e) {}
+}
+loadTokens();
 const linkExpiry = { duration: 0, enabled: false }; // 0 = no expiry, duration in minutes
 const templates = ['vault', 'gmail', 'facebook'];
 let currentTemplate = 'vault';
@@ -838,6 +851,7 @@ app.post('/api/admin/login', loginLimiter, (req, res) => {
     if (password === ADMIN_PASSWORD) {
         const token = crypto.randomBytes(24).toString('hex');
         adminTokens.add(token);
+        saveTokens();
         res.json({ ok: true, token });
     } else {
         res.status(401).json({ error: 'wrong password' });
@@ -846,7 +860,7 @@ app.post('/api/admin/login', loginLimiter, (req, res) => {
 
 app.post('/api/admin/logout', (req, res) => {
     const token = req.headers['x-admin-token'] || (req.headers['authorization'] && req.headers['authorization'].replace('Bearer ', ''));
-    if (token) adminTokens.delete(token);
+    if (token) { adminTokens.delete(token); saveTokens(); }
     res.json({ ok: true });
 });
 

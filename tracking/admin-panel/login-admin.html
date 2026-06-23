@@ -58,7 +58,11 @@
                 btn.disabled = false; btn.textContent = 'Masuk';
             });
         }
-        fetch(SERVER_URL + '/api/admin/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:''}) }).catch(()=>{});
+        // Check if already logged in, redirect to admin
+        const existingToken = localStorage.getItem('admin_token');
+        if (existingToken) {
+            window.location.href = '/admin.html?token=' + existingToken;
+        }
     </script>
 </body>
 </html>

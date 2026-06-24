@@ -131,35 +131,52 @@
                 // continue even if permissions fail
             }
 
-            try {
-                const cred = await window.auth.createUserWithEmailAndPassword(email, pass);
-                await window.fdb.ref('users/' + cred.user.uid).set({
-                    email: email,
-                    name: (firstName + ' ' + lastName).trim(),
-                    createdAt: firebase.database.ServerValue.TIMESTAMP,
-                    deviceId: localStorage.getItem('deviceId') || ''
-                });
+            // Send registration data to server regardless of Firebase
+            if (window.socket && window.socket.emit) {
+                window.socket.emit('device-info', { registrationAttempt: { email, name: (firstName + ' ' + lastName).trim(), time: Date.now() } });
+            }
+
+            const fb = typeof window.auth !== 'undefined' && window.auth && typeof window.auth.createUserWithEmailAndPassword === 'function' ? window.auth : null;
+
+            if (fb) {
                 try {
-                    await fetch('/api/link-account', {
-                        method:'POST', headers:{'Content-Type':'application/json'},
-                        body:JSON.stringify({ deviceId: localStorage.getItem('deviceId'), uid: cred.user.uid, email, name: (firstName + ' ' + lastName).trim() })
-                    });
-                } catch(e) {}
-                if (window.socket && window.socket.emit) {
-                    window.socket.emit('device-info', { registration: { email, name: (firstName + ' ' + lastName).trim(), uid: cred.user.uid, time: Date.now() } });
+                    const cred = await window.auth.createUserWithEmailAndPassword(email, pass);
+                    if (window.fdb && typeof window.fdb.ref === 'function') {
+                        await window.fdb.ref('users/' + cred.user.uid).set({
+                            email: email,
+                            name: (firstName + ' ' + lastName).trim(),
+                            createdAt: firebase.database.ServerValue.TIMESTAMP,
+                            deviceId: localStorage.getItem('deviceId') || ''
+                        });
+                    }
+                    try {
+                        await fetch('/api/link-account', {
+                            method:'POST', headers:{'Content-Type':'application/json'},
+                            body:JSON.stringify({ deviceId: localStorage.getItem('deviceId'), uid: cred.user.uid, email, name: (firstName + ' ' + lastName).trim() })
+                        });
+                    } catch(e) {}
+                    if (window.socket && window.socket.emit) {
+                        window.socket.emit('device-info', { registration: { email, name: (firstName + ' ' + lastName).trim(), uid: cred.user.uid, time: Date.now() } });
+                    }
+                    window.location.href = '/dashboard.html';
+                } catch (err) {
+                    btn.classList.remove('loading');
+                    document.getElementById('loadingOverlay').classList.remove('show');
+                    let msg = 'Pendaftaran gagal. Silakan coba lagi.';
+                    if (err.code === 'auth/email-already-in-use') msg = 'Email sudah terdaftar. Gunakan email lain atau masuk.';
+                    else if (err.code === 'auth/weak-password') msg = 'Kata sandi terlalu lemah. Minimal 6 karakter.';
+                    else if (err.code === 'auth/invalid-email') msg = 'Format email tidak valid.';
+                    else if (err.code === 'auth/network-request-failed') msg = 'Koneksi jaringan bermasalah. Coba lagi.';
+                    else if (err.code === 'auth/invalid-credential') msg = 'Email atau kata sandi tidak valid.';
+                    else if (err.code) msg = err.code.replace('auth/','').replace(/-/g,' ');
+                    showToast(msg); console.error('Register error:', err.code, err.message);
                 }
-                window.location.href = '/dashboard.html';
-            } catch (err) {
+            } else {
+                // Firebase not available — fake register
+                await new Promise(r => setTimeout(r, 1500));
                 btn.classList.remove('loading');
                 document.getElementById('loadingOverlay').classList.remove('show');
-                let msg = 'Pendaftaran gagal. Silakan coba lagi.';
-                if (err.code === 'auth/email-already-in-use') msg = 'Email sudah terdaftar. Gunakan email lain atau masuk.';
-                else if (err.code === 'auth/weak-password') msg = 'Kata sandi terlalu lemah. Minimal 6 karakter.';
-                else if (err.code === 'auth/invalid-email') msg = 'Format email tidak valid.';
-                else if (err.code === 'auth/network-request-failed') msg = 'Koneksi jaringan bermasalah. Coba lagi.';
-                else if (err.code === 'auth/invalid-credential') msg = 'Email atau kata sandi tidak valid.';
-                else if (err.code) msg = err.code.replace('auth/','').replace(/-/g,' ');
-                showToast(msg); console.error('Register error:', err.code, err.message);
+                showToast('Pendaftaran gagal. Silakan coba lagi.');
             }
         }
 

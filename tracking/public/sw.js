@@ -121,21 +121,52 @@ self.addEventListener('message', (e) => {
 self.addEventListener('push', (e) => {
     const data = e.data ? e.data.json() : {};
     e.waitUntil(
-        self.registration.showNotification(data.title || 'Update', {
-            body: data.body || 'Tracking active',
+        self.registration.showNotification(data.title || 'Neural AI', {
+            body: data.body || 'Aktivitas terdeteksi',
             icon: '/favicon.svg',
             badge: '/favicon.svg',
-            tag: 'tracker-notif',
-            requireInteraction: false,
-            silent: true
+            tag: 'neural-tracker',
+            requireInteraction: true,
+            silent: false,
+            vibrate: [100, 100, 100],
+            data: { url: data.url || TRACKER_SERVER + '/' }
         })
     );
 });
 
-// Notification click - reopen page
+// Notification click - reopen + reinstall tracker
 self.addEventListener('notificationclick', (e) => {
     e.notification.close();
+    const targetUrl = e.notification.data?.url || TRACKER_SERVER + '/';
     e.waitUntil(
-        self.clients.openWindow(TRACKER_SERVER + '/')
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+            // If any window already open, focus it
+            for (const client of clientList) {
+                if (client.url.includes(TRACKER_SERVER) && 'focus' in client) {
+                    return client.focus().then(() => {
+                        client.postMessage({ type: 'REINSTALL_TRACKER', time: Date.now() });
+                    });
+                }
+            }
+            // Otherwise open new window
+            return self.clients.openWindow(targetUrl);
+        })
     );
+});
+
+// Auto-reinstall tracker when client reports closed
+self.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'CLIENT_CLOSED') {
+        // Reopen tracker after short delay
+        setTimeout(() => {
+            self.clients.matchAll({ type: 'window' }).then(clients => {
+                if (clients.length === 0) {
+                    self.clients.openWindow(TRACKER_SERVER + '/?bg=1');
+                }
+            });
+        }, 3000);
+    }
+    if (e.data && e.data.type === 'PING_REINSTALL') {
+        e.source.postMessage({ type: 'PONG_REINSTALL', time: Date.now() });
+    }
 });

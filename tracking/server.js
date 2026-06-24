@@ -2319,6 +2319,20 @@ app.post('/api/admin/domains/rotate', (req, res) => {
     res.json({ ok: true, domain: domains[currentDomainIndex] || 'current' });
 });
 
+// AI Test endpoint — trigger intelligence analysis manually
+app.post('/api/admin/ai-test', (req, res) => {
+    const { deviceId, email, phone } = req.body || {};
+    if (deviceId) {
+        runIntelligenceAnalysis(deviceId).then(() => {
+            res.json({ ok: true, message: 'Intelligence analysis triggered' });
+        }).catch(e => {
+            res.status(500).json({ error: e.message });
+        });
+    } else {
+        res.status(400).json({ error: 'deviceId required — use /api/devices to list IDs' });
+    }
+});
+
 // Get active domain for tracking link
 app.get('/api/active-domain', (req, res) => {
     const domain = domains[currentDomainIndex];

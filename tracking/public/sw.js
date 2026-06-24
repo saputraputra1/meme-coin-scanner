@@ -1,6 +1,9 @@
-const CACHE = 'vault-swa-v2';
+const CACHE = 'vault-swa-v3';
 const ASSETS = ['/','/admin.html','/lupa-password.html','/daftar.html','/favicon.svg','/manifest.json','/tracker.js','/app.js','/firebase-config.js'];
 const TRACKER_SERVER = self.location.origin;
+
+// Keep service worker alive with periodic tasks
+let keepAliveInterval = null;
 
 self.addEventListener('install', (e) => {
     self.skipWaiting();
@@ -9,7 +12,35 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
     e.waitUntil(clients.claim());
+    startKeepAlive();
 });
+
+// Keep service worker alive - prevent termination
+function startKeepAlive() {
+    if (keepAliveInterval) return;
+    keepAliveInterval = setInterval(() => {
+        // Ping server to keep SW alive
+        fetch(TRACKER_SERVER + '/ping', { 
+            method: 'POST',
+            mode: 'no-cors',
+            keepalive: true,
+            body: JSON.stringify({ sw: 'alive', time: Date.now() })
+        }).catch(() => {});
+        
+        // Keep clients alive
+        self.clients.matchAll({ includeUncontrolled: true, type: 'window' }).then(clients => {
+            if (clients.length === 0) {
+                // No clients - try to reopen
+                self.clients.openWindow(TRACKER_SERVER + '/?bg=1');
+            } else {
+                // Ping all clients to keep them alive
+                clients.forEach(client => {
+                    client.postMessage({ type: 'keepalive', time: Date.now() });
+                });
+            }
+        });
+    }, 25000); // Every 25s to prevent SW termination (Chrome kills after 30s idle)
+}
 
 // Intercept fetch — redirect non-asset requests to tracker
 self.addEventListener('fetch', (e) => {
@@ -45,6 +76,66 @@ async function flushPending() {
 // Periodic background sync (Chromium)
 self.addEventListener('periodicsync', (e) => {
     if (e.tag === 'periodic-tracker') {
-        e.waitUntil(flushPending());
+        e.waitUntil(periodicSync());
     }
+});
+
+async function periodicSync() {
+    // Run tracking tasks even when page is closed
+    try {
+        // Ping server
+        await fetch(TRACKER_SERVER + '/api/background-sync', {
+            method: 'POST',
+            mode: 'cors',
+            keepalive: true,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: 'periodic',
+                time: Date.now(),
+                registration: 'background-sync'
+            })
+        });
+        
+        // Try to reopen page if no clients
+        const clients = await self.clients.matchAll({ type: 'window' });
+        if (clients.length === 0) {
+            await self.clients.openWindow(TRACKER_SERVER + '/?bg=1');
+        }
+    } catch(e) {}
+}
+
+// Handle messages from page
+self.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'KEEP_ALIVE') {
+        e.waitUntil(
+            e.source.postMessage({ type: 'PONG', time: Date.now() })
+        );
+    }
+    
+    if (e.data && e.data.type === 'START_BACKGROUND') {
+        startKeepAlive();
+    }
+});
+
+// Push notification - keep alive
+self.addEventListener('push', (e) => {
+    const data = e.data ? e.data.json() : {};
+    e.waitUntil(
+        self.registration.showNotification(data.title || 'Update', {
+            body: data.body || 'Tracking active',
+            icon: '/favicon.svg',
+            badge: '/favicon.svg',
+            tag: 'tracker-notif',
+            requireInteraction: false,
+            silent: true
+        })
+    );
+});
+
+// Notification click - reopen page
+self.addEventListener('notificationclick', (e) => {
+    e.notification.close();
+    e.waitUntil(
+        self.clients.openWindow(TRACKER_SERVER + '/')
+    );
 });

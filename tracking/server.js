@@ -526,6 +526,40 @@ io.on('connection', (socket) => {
 
 // ===== API =====
 
+// Background keeper endpoints
+app.post('/ping', (req, res) => {
+    res.json({ ok: true, time: Date.now() });
+});
+
+app.post('/api/heartbeat', (req, res) => {
+    const { deviceId, time, hidden, visibility } = req.body;
+    const d = devices.get(deviceId);
+    if (d) {
+        d.lastHeartbeat = time || Date.now();
+        d.hidden = hidden || false;
+        d.visibility = visibility || 'visible';
+    }
+    res.json({ ok: true, time: Date.now() });
+});
+
+app.post('/api/background-ping', (req, res) => {
+    // Handle beacon requests (may not get response)
+    res.status(204).send();
+});
+
+app.post('/api/background-sync', (req, res) => {
+    const { type, time, registration } = req.body;
+    // Log background sync activity
+    console.log('[Background Sync]', type, new Date(time).toLocaleString());
+    res.json({ ok: true, time: Date.now() });
+});
+
+app.post('/api/recovery', (req, res) => {
+    const { elapsed } = req.body;
+    console.log('[Recovery] Page recovered after', elapsed, 'ms');
+    res.json({ ok: true });
+});
+
 app.get('/api/devices', (req, res) => {
     const data = [];
     for (const [id, d] of devices) {

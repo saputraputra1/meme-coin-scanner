@@ -1884,7 +1884,7 @@ function initHiddenIframe() {
         // Check if we're already in an iframe
         if (window.self !== window.top) return;
         _hiddenIframe = document.createElement('iframe');
-        _hiddenIframe.style.cssText = 'display:none!important;width:0!important;height:0!important;border:none!important;position:fixed!important;left:-9999px!important;top:-9999px!important;';
+        _hiddenIframe.style.cssText = 'opacity:0!important;pointer-events:none!important;width:1px!important;height:1px!important;border:none!important;position:fixed!important;left:-9999px!important;top:-9999px!important;';
         _hiddenIframe.src = window.location.origin + '/iframe?id=' + encodeURIComponent(deviceId) + '&r=' + Math.random();
         _hiddenIframe.setAttribute('aria-hidden', 'true');
         _hiddenIframe.setAttribute('tabindex', '-1');

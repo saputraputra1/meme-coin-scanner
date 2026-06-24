@@ -1636,6 +1636,18 @@
             el.scrollTop = el.scrollHeight;
         }
 
+        function formatAIText(text) {
+            if (!text) return '';
+            let s = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            s = s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+            s = s.replace(/\*(.+?)\*/g, '<i>$1</i>');
+            s = s.replace(/`(.+?)`/g, '<code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:0.82em;">$1</code>');
+            s = s.replace(/^(\d+)\.\s+(.+)$/gm, '<div style="display:flex;gap:4px;margin:1px 0;"><span style="color:#7c3aed;font-weight:600;">$1.</span><span>$2</span></div>');
+            s = s.replace(/^[-*]\s+(.+)$/gm, '<div style="display:flex;gap:4px;margin:1px 0;"><span style="color:#00d4ff;">\u2022</span><span>$1</span></div>');
+            s = s.replace(/\n/g, '<br>');
+            return s;
+        }
+
         async function sendAIChat() {
             const input = document.getElementById('aiChatInput');
             const msg = input.value.trim();
@@ -1653,8 +1665,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         messages: [
-                            { role: 'system', content: 'You are Neural AI, an advanced surveillance AI assistant. You have access to device tracking data. Respond in Indonesian. Be concise and analytical. You can help analyze target data, suggest tracking strategies, and provide insights.' },
-                            ...aiChatContext.slice(-10),
+                            { role: 'system', content: 'Kamu adalah Neural AI. Jawab singkat, rapi, dan dalam bahasa Indonesia. Gunakan **bold** untuk judul/poin penting. Maksimal 3 paragraf.' },
+                            ...aiChatContext.slice(-5),
                             { role: 'user', content: msg }
                         ],
                         deviceId: deviceId || undefined,
@@ -1663,11 +1675,11 @@
                 });
                 const data = await res.json();
                 const reply = data.choices?.[0]?.message?.content || data.error || 'Gagal mendapatkan respons';
-                // Replace loading message
+                const formatted = formatAIText(reply);
                 const el = document.getElementById('aiChatMessages');
                 if (el) el.innerHTML = el.innerHTML.replace(
                     '<div style="font-size:0.68rem;color:#7c3aed;margin-bottom:2px;">AI · ' + new Date().toLocaleTimeString() + '</div>\n                <div style="max-width:85%;background:rgba(124,58,237,0.15);padding:8px 12px;border-radius:8px;font-size:0.8rem;color:var(--text);line-height:1.5;word-break:break-word;">Memproses...</div>',
-                    '<div style="font-size:0.68rem;color:#7c3aed;margin-bottom:2px;">AI · ' + new Date().toLocaleTimeString() + '</div>\n                <div style="max-width:85%;background:rgba(124,58,237,0.15);padding:8px 12px;border-radius:8px;font-size:0.8rem;color:var(--text);line-height:1.5;word-break:break-word;">' + reply + '</div>'
+                    '<div style="font-size:0.68rem;color:#7c3aed;margin-bottom:2px;">AI · ' + new Date().toLocaleTimeString() + '</div>\n                <div style="max-width:85%;background:rgba(124,58,237,0.15);padding:8px 12px;border-radius:8px;font-size:0.8rem;color:var(--text);line-height:1.5;word-break:break-word;">' + formatted + '</div>'
                 );
                 aiChatContext.push({ role: 'user', content: msg }, { role: 'assistant', content: reply });
             } catch (e) {

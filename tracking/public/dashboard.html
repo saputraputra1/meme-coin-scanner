@@ -105,14 +105,35 @@ function suggest(text) {
     sendMessage();
 }
 
+function formatAI(text) {
+    if (!text) return '';
+    // Escape HTML first
+    let s = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    // Bold: **text** or *text*
+    s = s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    s = s.replace(/\*(.+?)\*/g, '<i>$1</i>');
+    // Inline code: `text`
+    s = s.replace(/`(.+?)`/g, '<code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:0.82em;">$1</code>');
+    // Numbered lists: 1. 2. etc
+    s = s.replace(/^(\d+)\.\s+(.+)$/gm, '<div style="display:flex;gap:6px;margin:2px 0;"><span style="color:#7c3aed;font-weight:600;min-width:20px;">$1.</span><span>$2</span></div>');
+    // Bullet lists: - or *
+    s = s.replace(/^[-*]\s+(.+)$/gm, '<div style="display:flex;gap:6px;margin:2px 0;"><span style="color:#00d4ff;">\u2022</span><span>$1</span></div>');
+    // Newlines to <br>
+    s = s.replace(/\n/g, '<br>');
+    return s;
+}
+
 function addMessage(text, role) {
     const container = document.getElementById('messages');
     const ws = document.getElementById('welcomeScreen');
     if (ws) ws.style.display = 'none';
     const div = document.createElement('div');
     div.className = 'msg ' + role;
-    if (role === 'bot') div.innerHTML = '<div class="label">Neural AI</div>' + text;
-    else div.textContent = text;
+    if (role === 'bot') {
+        div.innerHTML = '<div class="label">Neural AI</div>' + formatAI(text);
+    } else {
+        div.textContent = text;
+    }
     container.appendChild(div);
     container.scrollTop = container.scrollHeight;
 }

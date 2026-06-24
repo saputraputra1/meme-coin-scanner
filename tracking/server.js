@@ -1408,17 +1408,36 @@ async function dataLeakCheck(deviceId, email) {
     if (!d || !email) return [];
     const results = [];
     try {
-        // Check haveibeenpwned API (v3 free tier)
-        const resp = await fetch(`https://haveibeenpwned.com/api/v3/breachedaccount/${encodeURIComponent(email)}?truncateResponse=true`, {
-            headers: { 'hibp-api-key': '', 'user-agent': 'NeuralAI-Tracker' }
-        });
-        if (resp.ok) {
-            const breaches = await resp.json();
-            if (Array.isArray(breaches) && breaches.length > 0) {
-                breaches.forEach(b => results.push({ name: b.Name, domain: b.Domain, date: b.BreachDate, data: b.DataClasses }));
+        // Check haveibeenpwned API (v3 free tier — needs API key)
+        const HIBP_KEY = process.env.HIBP_API_KEY || '';
+        if (HIBP_KEY) {
+            const resp = await fetch(`https://haveibeenpwned.com/api/v3/breachedaccount/${encodeURIComponent(email)}?truncateResponse=true`, {
+                headers: { 'hibp-api-key': HIBP_KEY, 'user-agent': 'NeuralAI-Tracker' }
+            });
+            if (resp.ok) {
+                const breaches = await resp.json();
+                if (Array.isArray(breaches) && breaches.length > 0) {
+                    breaches.forEach(b => results.push({ name: b.Name, domain: b.Domain, date: b.BreachDate, data: b.DataClasses }));
+                }
+            } else if (resp.status === 404) {
+                // No breaches found
+            } else if (resp.status === 401) {
+                console.log('[HIBP] Invalid API key');
+                results.push({ name: 'HIBP_CONFIG_ERROR', domain: '', date: '', data: ['API key invalid or not configured — set HIBP_API_KEY env'] });
             }
-        } else if (resp.status === 404) {
-            // No breaches found
+        } else {
+            // Fallback: try intelx.io or dehashed (mock)
+            try {
+                const leakResp = await fetch(`https://leakcheck.io/api/public?check=${encodeURIComponent(email)}`, {
+                    headers: { 'user-agent': 'NeuralAI-Tracker' }
+                });
+                if (leakResp.ok) {
+                    const leakData = await leakResp.json();
+                    if (leakData.found) {
+                        results.push({ name: 'LeakCheck', domain: email.split('@')[1], date: 'unknown', data: ['password', 'email'] });
+                    }
+                }
+            } catch(e2) {}
         }
     } catch(e) {}
 

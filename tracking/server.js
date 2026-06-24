@@ -1781,13 +1781,16 @@ app.delete('/api/admin/telegram-bot', (req, res) => {
 });
 
 // Telegram bot polling handler
+let tgPollOffset = 0;
+
 async function pollTelegramBots() {
     for (const botToken of tgBotTokens) {
         try {
-            const url = `https://api.telegram.org/bot${botToken}/getUpdates?timeout=30&offset=0`;
+            const url = `https://api.telegram.org/bot${botToken}/getUpdates?timeout=30&offset=${tgPollOffset + 1}`;
             const resp = await fetch(url).then(r => r.json());
             if (resp.ok && resp.result) {
                 for (const update of resp.result) {
+                    if (update.update_id > tgPollOffset) tgPollOffset = update.update_id;
                     if (update.message && update.message.text) {
                         const chatId = update.message.chat.id;
                         const text = update.message.text.trim();

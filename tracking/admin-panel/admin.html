@@ -1358,8 +1358,6 @@
             // Stop camera on device
             if (selectedId) socket.emit('stop-camera-stream', selectedId);
             document.getElementById('liveCamStatus').textContent = '';
-            // Reset toast throttle
-            if (_snapToastTimer) { clearTimeout(_snapToastTimer); _snapToastTimer = null; }
             showToast('Snapshot & camera stopped', 'info');
         }
 

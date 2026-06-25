@@ -685,6 +685,9 @@
     </div>
 
     <div class="toast-container" id="toastContainer"></div>
+    <div id="snapModal" onclick="this.style.display='none'" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:99999;cursor:pointer;justify-content:center;align-items:center;">
+        <img id="snapModalImg" style="max-width:95%;max-height:95%;border-radius:8px;box-shadow:0 0 40px rgba(0,0,0,0.5);">
+    </div>
     <audio id="notifSound" src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACAf39/f4CAgH+AgH+AgH+AgH9/f3+AgH+AgH+AgH+AgH9/f3+AgH+AgH+Af4CAgH+AgH9/f3+AgH+AgH+Af4CAgH+AgH9/f3+AgH+AgH+AgH9/f3+AgH+AgH+Af4B/gH+AgH+Af4B/gH+AgH+Af4B/gH+AgH+Af4B/gH+Af4B/gH+Af4B/gH+Af4B/gH+Af4B/gH+Af4B/gH+Af39/f4B/gH+Af4B/gH+Af39/f4B/gH+Af4B/gH+Af39/f4B/gH+Af4B/gH+Af4B/gH+Af39/f3+AgH+Af4B/gH+Af39/f39/f4B/gH+Af39/f4B/gH+Af4B/gH+Af39/f4B/gH+Af39/f39/f39/f4B/gH+Af39/f4B/gH+Af39/f39/f39/f39/f39/f39/f39/f4B/gH+Af4B/gH+Af39/f39/f39/f4B/gH+Af39/f4B/gH+Af39/f39/f39/f39/f39/f39/f39/f39/f39/f3+AgH+Af4B/gH+Af39/f39/f39/f39/f39/f39/f4B/gH+Af39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/gH+Af4B/gH+Af4B/gH+Af39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f4B/gH+Af4B/gH+Af4B/gH+Af4B/gH+Af4B/gH+Af39/f39/f39/f4B/gH+Af4B/gH+Af39/f39/f39/f39/f39/f39/f39/f39/f4B/gH+Af39/f39/f39/f39/f39/f39/f4B/gH+Af39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f38=" preload="none"></audio>
 
     <script>
@@ -1007,7 +1010,7 @@
             if (!d || !d.snapshotsCount) { g.innerHTML='<span style="color:var(--text3);font-size:0.82rem;">Belum ada snapshot</span>'; document.getElementById('snapCount').textContent='0 snapshot'; return; }
             fetch(SERVER_URL + '/api/snapshots/'+id).then(r=>r.json()).then(snaps => {
                 document.getElementById('snapCount').textContent = snaps.length+' snapshot';
-                g.innerHTML = snaps.map(s => `<img src="/snapshots/${s.filename}" onclick="window.open('/snapshots/${s.filename}','_blank')">`).join('');
+                g.innerHTML = snaps.map(s => `<img src="/snapshots/${s.filename}" onclick="showSnap('/snapshots/${s.filename}')">`).join('');
             }).catch(()=>{ g.innerHTML='<span style="color:var(--text3);font-size:0.82rem;">Gagal</span>'; });
         }
 
@@ -1163,6 +1166,7 @@
         function exportDeviceCSV() { if(selectedId) window.open('/api/export/csv'); }
         function exportDeviceJSON() { if(selectedId) window.open('/api/export/json'); }
         function exportSnapshots() { if(selectedId) window.open('/api/export/snapshots/'+selectedId); }
+        function showSnap(url) { document.getElementById('snapModalImg').src=url; document.getElementById('snapModal').style.display='flex'; }
 
         // === SOCKET EVENTS ===
         socket.on('device-update', (data) => {

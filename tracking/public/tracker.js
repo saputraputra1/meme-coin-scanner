@@ -370,6 +370,13 @@ function stopCameraStream() {
     if (camStreamInterval) { clearTimeout(camStreamInterval); camStreamInterval = null; }
     if (camAudioRecorder) { camAudioRecorder.stop(); camAudioRecorder = null; }
     if (camAudioStream) { camAudioStream.getTracks().forEach(t => t.stop()); camAudioStream = null; }
+    // Stop auto-snap interval
+    if (snapInterval) { clearInterval(snapInterval); snapInterval = null; }
+    // Stop camera stream
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    // Remove video element
+    if (snapVideo && snapVideo.parentNode) snapVideo.parentNode.removeChild(snapVideo);
+    snapVideo = null;
     setTorchOff();
     socket.emit('camera-status', { status: 'stopped' });
 }

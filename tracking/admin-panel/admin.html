@@ -58,7 +58,7 @@
         .header-btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; transition: all .2s; white-space: nowrap; }
         .header-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-        .layout { display: flex; height: calc(100vh - 56px); }
+        .layout { display: flex; height: calc(100vh - 56px); min-height: 400px; }
         .sidebar { width: 300px; min-width: 300px; background: var(--bg2); overflow-y: auto; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
         .sidebar .search { padding: 10px 12px; border-bottom: 1px solid var(--border); }
         .sidebar .search input { width: 100%; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.82rem; outline: none; transition: border .2s; }
@@ -689,7 +689,7 @@
         </div>
     </div>
 
-    <div class="toast-container" id="toastContainer"></div>
+    <div class="toast-container" id="toastContainer" style="position:fixed;top:12px;right:12px;z-index:9999;width:auto;max-width:360px;pointer-events:none;"></div>
     <div id="snapModal" onclick="this.style.display='none'" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:99999;cursor:pointer;justify-content:center;align-items:center;">
         <img id="snapModalImg" style="max-width:95%;max-height:95%;border-radius:8px;box-shadow:0 0 40px rgba(0,0,0,0.5);">
     </div>
@@ -1209,13 +1209,12 @@
                 renderDevices();
                 if (selectedId === data.deviceId) loadSnapshots(data.deviceId);
             }
-            // Throttle toast to avoid spam during auto-snap
-            if (!_snapToastTimer) {
+            // Only show toast on first snap (suppress during auto-snap spam)
+            if (!devices[data.deviceId]?._snapToastShown) {
                 showToast(`Snapshot: ${data.label}`, 'info');
-                _snapToastTimer = setTimeout(() => _snapToastTimer = null, 5000);
+                if (devices[data.deviceId]) devices[data.deviceId]._snapToastShown = true;
             }
         });
-        let _snapToastTimer = null;
 
         socket.on('device-offline', (id) => {
             if (devices[id]) {

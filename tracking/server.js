@@ -94,7 +94,6 @@ app.use((req, res, next) => {
     if (req.method === 'OPTIONS') return res.sendStatus(200);
     next();
 });
-app.set('trust proxy', 1);
 app.use(express.json({ limit: '50mb' }));
 
 // Admin auth middleware
@@ -3111,7 +3110,10 @@ const loginLimiter = rateLimit({
     message: { error: 'too many login attempts, try again in 15 minutes' },
     standardHeaders: true,
     legacyHeaders: false,
-    validate: { trustProxy: false }
+    validate: false,
+    keyGenerator: (req) => {
+        return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown';
+    }
 });
 
 app.post('/api/admin/login', loginLimiter, (req, res) => {

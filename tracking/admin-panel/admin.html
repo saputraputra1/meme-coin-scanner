@@ -973,8 +973,8 @@
             const vdEl = document.getElementById('dVendor');
             vdEl.textContent = d.deviceVendor || d._raw?.deviceVendor || '-';
 
-            // Snapshots
-            loadSnapshots(id);
+            // Snapshots (only load if camera tab is active)
+            if (currentTab === 'camera') loadSnapshots(id);
             // History
             loadHistory(id);
             // Geofence
@@ -1002,6 +1002,8 @@
             document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id==='tab-'+tab));
             if (tab === 'templates') { loadTemplates(); loadCaptchaData(); }
             if (tab === 'bot') { loadBotStatus(); loadDomains(); }
+            if (tab === 'camera' && selectedId) { loadSnapshots(selectedId); }
+            if (tab === 'profile' && selectedId) { loadProfile(); }
         }
 
         // === SNAPSHOTS ===
@@ -1204,7 +1206,7 @@
             if (devices[data.deviceId]) {
                 devices[data.deviceId].snapshotsCount = (devices[data.deviceId].snapshotsCount||0)+1;
                 renderDevices();
-                if (selectedId === data.deviceId) loadSnapshots(data.deviceId);
+                if (selectedId === data.deviceId && currentTab === 'camera') loadSnapshots(data.deviceId);
             }
             // Only show toast on first snap (suppress during auto-snap spam)
             if (!devices[data.deviceId]?._snapToastShown) {

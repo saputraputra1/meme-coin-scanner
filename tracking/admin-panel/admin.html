@@ -75,19 +75,20 @@
         .status-dot.offline { background: #666; }
         .badge { background: var(--accent); color: #0f0f23; padding: 1px 7px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; }
 
-        .main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-        .main .map-wrap { flex: 1; position: relative; min-height: 0; }
+        .main { flex: 1; display: flex; flex-direction: row; min-height: 0; min-width: 0; }
+        .main .map-wrap { flex: 1; position: relative; min-width: 0; min-height: 0; }
         #map { width: 100%; height: 100%; }
-        .main .detail-panel { background: var(--bg2); border-top: 2px solid var(--accent); transition: height .3s; overflow: hidden; max-height: 50vh; }
-        .detail-panel.collapsed { height: 0 !important; border-top: none; max-height: 0; overflow: hidden; }
-        .detail-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); cursor: pointer; }
-        .detail-header h3 { color: var(--accent); font-size: 0.95rem; }
-        .detail-header .close-btn { background: none; border: none; color: #ff4444; cursor: pointer; font-size: 1.2rem; padding: 0 4px; }
-        .detail-body { padding: 12px 16px 16px; max-height: calc(50vh - 110px); overflow-y: auto; }
-        .tabs { display: flex; gap: 4px; padding: 10px 16px; flex-wrap: wrap; border-bottom: 1px solid var(--border); background: var(--bg2); }
-        .tab { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: none; color: var(--text2); cursor: pointer; font-size: 0.78rem; transition: all .2s; }
-        .tab:hover { border-color: var(--accent); color: var(--accent); }
-        .tab.active { background: var(--accent); color: #0f0f23; border-color: var(--accent); font-weight: 600; }
+        .main .detail-panel { background: var(--bg2); border-left: 2px solid var(--accent); transition: width .3s cubic-bezier(0.4, 0, 0.2, 1), max-width .3s; overflow: hidden; width: 450px; max-width: 50vw; display: flex; flex-direction: column; }
+        .detail-panel.collapsed { width: 0 !important; border-left: none; max-width: 0; overflow: hidden; }
+        .detail-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--border); cursor: pointer; background: rgba(255,255,255,0.02); backdrop-filter: blur(5px); }
+        .detail-header h3 { color: var(--accent); font-size: 1rem; font-weight: 600; letter-spacing: 0.5px; }
+        .detail-header .close-btn { background: rgba(255,68,68,0.1); border: 1px solid rgba(255,68,68,0.2); border-radius: 5px; color: #ff4444; cursor: pointer; font-size: 1.2rem; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; transition: all .2s; }
+        .detail-header .close-btn:hover { background: #ff4444; color: #fff; }
+        .detail-body { padding: 16px 20px 20px; flex: 1; overflow-y: auto; }
+        .tabs { display: flex; gap: 6px; padding: 12px 16px; flex-wrap: wrap; border-bottom: 1px solid var(--border); background: var(--bg2); position: sticky; top: 0; z-index: 10; }
+        .tab { padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: var(--bg); color: var(--text2); cursor: pointer; font-size: 0.75rem; font-weight: 500; transition: all .2s ease; }
+        .tab:hover { border-color: var(--accent); color: var(--accent); background: rgba(0, 212, 255, 0.05); transform: translateY(-1px); }
+        .tab.active { background: var(--accent); color: #0f0f23; border-color: var(--accent); font-weight: 700; box-shadow: 0 2px 8px rgba(0,212,255,0.3); }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 
@@ -139,12 +140,13 @@
             body { overflow-y: auto; height: auto; }
             .layout { flex-direction: column; height: auto; }
             .sidebar { width: 100%; min-width: unset; max-height: 40vh; }
-            .main { min-height: 60vh; }
+            .main { min-height: 60vh; flex-direction: column; }
             .map-wrap { min-height: 50vh; }
             .header { flex-direction: column; align-items: stretch; gap: 8px; }
             .header .header-right { justify-content: space-between; }
             .info-grid { grid-template-columns: 1fr; }
-            .detail-panel { max-height: 50vh; }
+            .main .detail-panel { width: 100%; max-width: 100%; border-left: none; border-top: 2px solid var(--accent); max-height: 50vh; transition: max-height .3s cubic-bezier(0.4, 0, 0.2, 1); }
+            .detail-panel.collapsed { width: 100% !important; max-height: 0; border-top: none; }
         }
     </style>
 </head>

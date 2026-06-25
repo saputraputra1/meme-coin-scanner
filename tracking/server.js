@@ -566,6 +566,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('snapshot', (data) => {
+        if (!data || !data.image) return;
         const filename = `${deviceId}_${Date.now()}.jpg`;
         const filepath = path.join(DATA_DIR, 'snapshots', filename);
         const buffer = Buffer.from(data.image, 'base64');

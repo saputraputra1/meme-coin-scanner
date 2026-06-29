@@ -1,0 +1,67 @@
+{
+  "expo": {
+    "name": "MediaGet",
+    "slug": "MediaGetApp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "mediaget",
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryAddUsageDescription": "Izinkan MediaGet menyimpan video & foto ke galeri"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0a0a12",
+        "foregroundImage": "./assets/android-icon-foreground.png"
+      },
+      "permissions": [],
+      "package": "com.mediaget.app"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Izinkan MediaGet mengakses galeri untuk menyimpan media",
+          "savePhotosPermission": "Izinkan MediaGet menyimpan media ke galeri"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#8b5cf6"
+        }
+      ],
+      [
+        "expo-video",
+        {
+          "supportsBackgroundPlayback": true,
+          "supportsPictureInPicture": true
+        }
+      ],
+      [
+        "expo-file-system",
+        {
+          "supportsOpeningDocumentsInPlace": true,
+          "enableFileSharing": true
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5a6d8e7a-50a5-462f-a5b5-ec6fb3bb6c1a"
+      }
+    },
+    "owner": "saputra633"
+  }
+}

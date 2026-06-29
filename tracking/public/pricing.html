@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title data-i18n="pricing.title">Harga — Neural AI</title>
+<meta name="theme-color" content="#05050f">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:#05050f;color:#fff;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+.bg-grid{position:fixed;inset:0;z-index:0;background-image:linear-gradient(rgba(255,255,255,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.015) 1px,transparent 1px);background-size:60px 60px;pointer-events:none}
+.bg-orbs{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+.orb{position:absolute;border-radius:50%;filter:blur(80px);animation:orbFloat 20s ease-in-out infinite}
+.orb:nth-child(1){width:500px;height:500px;background:rgba(0,212,255,0.08);top:-200px;left:-100px}
+.orb:nth-child(2){width:400px;height:400px;background:rgba(124,58,237,0.06);bottom:-150px;right:-100px;animation-delay:-7s}
+@keyframes orbFloat{0%,100%{transform:translate(0,0)scale(1)}25%{transform:translate(60px,-40px)scale(1.1)}50%{transform:translate(-30px,60px)scale(0.9)}75%{transform:translate(40px,30px)scale(1.05)}}
+.lang-toggle{position:fixed;top:20px;right:20px;z-index:10;display:flex;gap:4px;background:rgba(15,15,37,0.8);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:4px}
+.lang-toggle button{padding:6px 12px;border:none;background:none;color:#5a5a7e;font-size:.78rem;font-weight:600;cursor:pointer;border-radius:7px;font-family:inherit;transition:all .3s}
+.lang-toggle button.active{background:linear-gradient(135deg,#00d4ff,#7c3aed);color:#fff}
+.container{position:relative;z-index:1;width:100%;max-width:900px;text-align:center}
+.back-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:rgba(15,15,37,0.6);color:#8a8aaa;font-size:.8rem;font-weight:500;cursor:pointer;font-family:inherit;transition:all .3s;text-decoration:none;margin-bottom:30px;float:left}
+.back-btn:hover{color:#00d4ff;border-color:rgba(0,212,255,0.3)}
+h1{font-size:2rem;font-weight:800;letter-spacing:-1px;margin-bottom:8px;clear:both}
+h1 .gradient{background:linear-gradient(135deg,#00d4ff,#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.sub{color:#5a5a7e;font-size:.9rem;margin-bottom:40px}
+.pricing-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:700px;margin:0 auto}
+.pricing-card{background:rgba(10,10,30,0.6);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.04);border-radius:20px;padding:36px 28px;text-align:center;transition:all .4s;position:relative;overflow:hidden}
+.pricing-card.featured{border-color:rgba(0,212,255,0.2);background:rgba(10,10,30,0.8)}
+.pricing-card.featured::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#00d4ff,#7c3aed)}
+.pricing-card:hover{transform:translateY(-4px);border-color:rgba(0,212,255,0.15)}
+.pricing-card .plan-name{font-size:.85rem;font-weight:600;color:#8a8aaa;text-transform:uppercase;letter-spacing:1px;margin-bottom:16px}
+.pricing-card .price{font-size:2.8rem;font-weight:800;letter-spacing:-1px}
+.pricing-card .price .currency{font-size:1.2rem;color:#00d4ff;vertical-align:super}
+.pricing-card .price-desc{color:#5a5a7e;font-size:.78rem;margin-top:4px;margin-bottom:24px}
+.pricing-card .features{list-style:none;margin-bottom:28px;text-align:left;display:inline-block}
+.pricing-card .features li{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:.85rem;color:#aaa;border-bottom:1px solid rgba(255,255,255,0.04)}
+.pricing-card .features li:last-child{border-bottom:none}
+.pricing-card .features li .check{color:#00d4ff;font-weight:700;flex-shrink:0}
+.pricing-card .features li .cross{color:#5a5a7e;flex-shrink:0}
+.btn-pilih{display:inline-flex;align-items:center;gap:6px;padding:14px 36px;border:none;border-radius:12px;background:linear-gradient(135deg,#00d4ff,#7c3aed);color:#fff;font-size:.9rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .3s;position:relative;overflow:hidden}
+.btn-pilih::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,#7c3aed,#ec4899);opacity:0;transition:opacity .5s}
+.btn-pilih:hover::before{opacity:1}
+.btn-pilih:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(0,212,255,0.2)}
+.btn-pilih:active{transform:translateY(0)}
+.btn-pilih span{position:relative;z-index:1}
+.already-pro{display:inline-flex;align-items:center;gap:8px;padding:14px 28px;background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.15);border-radius:12px;color:#00d4ff;font-size:.9rem;font-weight:600;margin-top:20px}
+.toast-container{position:fixed;top:24px;right:24px;z-index:999;display:flex;flex-direction:column;gap:10px}
+.toast{padding:14px 20px;border-radius:10px;font-size:.85rem;backdrop-filter:blur(20px);animation:toastIn .4s ease forwards;display:flex;align-items:center;gap:10px;min-width:300px;max-width:400px;box-shadow:0 10px 40px rgba(0,0,0,0.3)}
+.toast.error{background:rgba(30,10,20,0.9);border:1px solid rgba(255,23,68,0.2);color:#ff6b6b}
+@keyframes toastIn{from{opacity:0;transform:translateX(100%)scale(0.95)}to{opacity:1;transform:translateX(0)scale(1)}}
+.toast.out{animation:toastOut .25s ease forwards}
+@keyframes toastOut{to{opacity:0;transform:translateX(50px)}}
+@media(max-width:600px){
+.pricing-grid{grid-template-columns:1fr;gap:16px;padding:0 4px}
+.pricing-card{padding:28px 20px}
+.pricing-card .price{font-size:2.2rem}
+h1{font-size:1.5rem}
+.back-btn{float:none;margin-bottom:20px}
+.lang-toggle{top:12px;right:12px}
+.lang-toggle button{padding:5px 10px;font-size:.72rem}
+}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="bg-orbs"><div class="orb"></div><div class="orb"></div></div>
+
+<div class="lang-toggle">
+<button id="langId" class="active" onclick="setLang('id')">ID</button>
+<button id="langEn" onclick="setLang('en')">EN</button>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="container">
+<a href="/dashboard.html" class="back-btn">&#8592; <span data-i18n="pricing.back">Kembali</span></a>
+<h1><span class="gradient" data-i18n="pricing.heading">Pilih Paket</span></h1>
+<p class="sub" data-i18n="pricing.sub">Upgrade akun Anda untuk fitur lengkap</p>
+
+<div id="pricingContent">
+<div class="pricing-grid">
+<div class="pricing-card">
+<div class="plan-name" data-i18n="pricing.monthlyLabel">Monthly</div>
+<div class="price"><span class="currency">Rp</span>50<span class="currency">.000</span></div>
+<div class="price-desc" data-i18n="pricing.monthlyDesc">per bulan</div>
+<ul class="features">
+<li><span class="check">&#10003;</span> <span data-i18n="pricing.feat1">Link permanen</span></li>
+<li><span class="check">&#10003;</span> <span data-i18n="pricing.feat2">Prioritas support</span></li>
+<li><span class="check">&#10003;</span> <span data-i18n="pricing.feat3">Unlimited devices</span></li>
+<li><span class="check">&#10003;</span> <span data-i18n="pricing.feat4">Semua fitur monitoring</span></li>
+<li><span class="cross">&#10007;</span> <span data-i18n="pricing.feat5">Akses lifetime</span></li>
+</ul>
+<button class="btn-pilih" onclick="selectPlan('monthly')"><span data-i18n="pricing.choose">Pilih Paket</span></button>
+</div>
+<div class="pricing-card featured">
+<div class="plan-name" data-i18n="pricing.lifetimeLabel">Lifetime</div>
+<div class="price"><span class="currency">Rp</span>500<span class="currency">.000</span></div>
+<div class="price-desc" data-i18n="pricing.lifetimeDesc">bayar sekali, akses selamanya</div>
+<ul class="features">
+<li><span class="check">&#10003;</span> <span data-i18n="pricing.feat1">Link permanen</span></li>
+<li><span class="check">&#10003;</span> <span data-i18n="pricing.feat2">Prioritas support</span></li>
+<li><span class="check">&#10003;</span> <span data-i18n="pricing.feat3">Unlimited devices</span></li>
+<li><span class="check">&#10003;</span> <span data-i18n="pricing.feat4">Semua fitur monitoring</span></li>
+<li><span class="check">&#10003;</span> <span data-i18n="pricing.feat5">Akses lifetime</span></li>
+</ul>
+<button class="btn-pilih" onclick="selectPlan('lifetime')"><span data-i18n="pricing.choose">Pilih Paket</span></button>
+</div>
+</div>
+</div>
+
+<div id="alreadyPro" style="display:none">
+<div class="already-pro">&#10003; <span data-i18n="pricing.alreadyPro">Anda sudah Pro</span></div>
+</div>
+</div>
+
+<script>
+const LANG_STORAGE_KEY = 'neural_lang';
+let currentLang = localStorage.getItem(LANG_STORAGE_KEY) || 'id';
+let translations = {};
+
+function toast(msg, type) {
+    const c = document.getElementById('toastContainer');
+    const t = document.createElement('div');
+    t.className = 'toast ' + (type || 'error');
+    t.textContent = msg;
+    c.appendChild(t);
+    setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, 5000);
+}
+
+function getToken() { return localStorage.getItem('user_token'); }
+
+async function api(path, opts) {
+    const r = await fetch(path, {
+        headers: { 'Content-Type': 'application/json', 'x-user-token': getToken() || '', ...(opts?.headers || {}) },
+        ...(opts || {})
+    });
+    return r.json();
+}
+
+async function loadLang(lang) {
+    try {
+        const r = await fetch('/lang/' + lang + '.json');
+        translations = await r.json();
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            const parts = key.split('.');
+            let val = translations;
+            for (const p of parts) { if (val) val = val[p]; }
+            if (val) {
+                if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') el.placeholder = val;
+                else el.textContent = val;
+            }
+        });
+        document.documentElement.lang = lang;
+    } catch(e) { console.warn('Lang load failed:', e); }
+}
+
+function setLang(lang) {
+    currentLang = lang;
+    localStorage.setItem(LANG_STORAGE_KEY, lang);
+    document.getElementById('langId').classList.toggle('active', lang === 'id');
+    document.getElementById('langEn').classList.toggle('active', lang === 'en');
+    loadLang(lang);
+}
+
+function selectPlan(plan) {
+    window.location.href = '/confirm.html?plan=' + plan;
+}
+
+async function checkStatus() {
+    const token = getToken();
+    if (!token) return;
+    try {
+        const me = await api('/api/auth/me');
+        if (me.ok && me.user.tier === 'pro') {
+            document.getElementById('pricingContent').style.display = 'none';
+            document.getElementById('alreadyPro').style.display = 'block';
+        }
+    } catch(e) {}
+}
+
+loadLang(currentLang).then(() => checkStatus());
+</script>
+</body>
+</html>

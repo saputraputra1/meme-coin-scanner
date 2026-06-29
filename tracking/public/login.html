@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title data-i18n="login.title">Masuk — Neural AI</title>
+<meta name="theme-color" content="#05050f">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:#05050f;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.bg-grid{position:fixed;inset:0;z-index:0;background-image:linear-gradient(rgba(255,255,255,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.015) 1px,transparent 1px);background-size:60px 60px}
+.bg-orbs{position:fixed;inset:0;z-index:0;overflow:hidden}
+.orb{position:absolute;border-radius:50%;filter:blur(80px);animation:orbFloat 20s ease-in-out infinite}
+.orb:nth-child(1){width:500px;height:500px;background:rgba(0,212,255,0.08);top:-200px;left:-100px}
+.orb:nth-child(2){width:400px;height:400px;background:rgba(124,58,237,0.06);bottom:-150px;right:-100px;animation-delay:-7s}
+@keyframes orbFloat{0%,100%{transform:translate(0,0)scale(1)}25%{transform:translate(60px,-40px)scale(1.1)}50%{transform:translate(-30px,60px)scale(0.9)}75%{transform:translate(40px,30px)scale(1.05)}}
+.card{position:relative;z-index:1;background:rgba(10,10,30,0.8);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);border:1px solid rgba(255,255,255,0.04);border-radius:20px;padding:45px 40px;width:100%;max-width:460px}
+.card .logo{display:flex;align-items:center;gap:10px;margin-bottom:24px;text-decoration:none}
+.card .logo .mark{width:36px;height:36px;background:linear-gradient(135deg,#00d4ff,#7c3aed);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.card .logo span{font-weight:600;color:#ccc;font-size:1rem}
+.card h2{font-size:1.4rem;font-weight:700;letter-spacing:-.5px}
+.card .sub{color:#5a5a7e;font-size:.85rem;margin-top:6px;margin-bottom:25px}
+.lang-toggle{position:fixed;top:20px;right:20px;z-index:10;display:flex;gap:4px;background:rgba(15,15,37,0.8);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:4px}
+.lang-toggle button{padding:6px 12px;border:none;background:none;color:#5a5a7e;font-size:.78rem;font-weight:600;cursor:pointer;border-radius:7px;font-family:inherit;transition:all .3s}
+.lang-toggle button.active{background:linear-gradient(135deg,#00d4ff,#7c3aed);color:#fff}
+.input-group{margin-bottom:16px}
+.input-group label{display:block;font-size:.78rem;font-weight:600;color:#8a8aaa;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.input-field{border-radius:12px;background:#0f0f25;border:1px solid #1e1e3e;transition:all .4s}
+.input-field:focus-within{border-color:#00d4ff;box-shadow:0 0 0 3px rgba(0,212,255,0.06);background:#12122a}
+.input-field input{width:100%;padding:14px 16px;background:none;border:none;outline:none;color:#fff;font-size:.9rem;font-family:inherit}
+.input-field input::placeholder{color:#3a3a5e}
+.checkbox-row{display:flex;justify-content:space-between;align-items:center;margin:22px 0}
+.checkbox-row label{display:flex;align-items:center;gap:8px;font-size:.82rem;color:#7a7a9a;cursor:pointer;user-select:none}
+.checkbox-row input[type="checkbox"]{display:none}
+.checkbox-row .check-box{width:18px;height:18px;border-radius:5px;border:2px solid #2a2a4e;display:flex;align-items:center;justify-content:center;transition:all .3s;flex-shrink:0}
+.checkbox-row input:checked+.check-box{background:#00d4ff;border-color:#00d4ff}
+.checkbox-row input:checked+.check-box::after{content:'\2713';color:#0a0a1a;font-size:11px;font-weight:700}
+.btn{width:100%;padding:15px;border:none;border-radius:12px;background:linear-gradient(135deg,#00d4ff,#7c3aed);color:#fff;font-size:.9rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .3s;position:relative;overflow:hidden}
+.btn::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,#7c3aed,#ec4899);opacity:0;transition:opacity .5s}
+.btn:hover::before{opacity:1}
+.btn:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(0,212,255,0.2)}
+.btn:active{transform:translateY(0)}
+.btn span,.btn .spinner{position:relative;z-index:1}
+.btn .spinner{display:none;width:20px;height:20px;margin:0 auto;border:2px solid rgba(255,255,255,0.2);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
+.btn.loading span{display:none}
+.btn.loading .spinner{display:block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.auth-footer{text-align:center;margin-top:20px;font-size:.82rem;color:#4a4a6e}
+.auth-footer a{color:#5a5a8a;text-decoration:none;font-weight:500}
+.auth-footer a:hover{color:#00d4ff}
+.toast-container{position:fixed;top:24px;right:24px;z-index:999;display:flex;flex-direction:column;gap:10px}
+.toast{padding:14px 20px;border-radius:10px;font-size:.85rem;backdrop-filter:blur(20px);animation:toastIn .4s ease forwards;display:flex;align-items:center;gap:10px;min-width:300px;max-width:400px;box-shadow:0 10px 40px rgba(0,0,0,0.3)}
+.toast.error{background:rgba(30,10,20,0.9);border:1px solid rgba(255,23,68,0.2);color:#ff6b6b}
+.toast.success{background:rgba(10,30,20,0.9);border:1px solid rgba(0,212,255,0.2);color:#00d4ff}
+@keyframes toastIn{from{opacity:0;transform:translateX(100%)scale(0.95)}to{opacity:1;transform:translateX(0)scale(1)}}
+.toast.out{animation:toastOut .25s ease forwards}
+@keyframes toastOut{to{opacity:0;transform:translateX(50px)}}
+@media(max-width:600px){
+.card{padding:30px 24px;border-radius:16px}
+.card h2{font-size:1.25rem}
+.input-field input{padding:13px 14px;font-size:16px}
+.btn{padding:14px}
+.toast-container{top:16px;right:16px;left:16px}
+.toast{min-width:unset;width:100%;font-size:.82rem;padding:13px 16px}
+.lang-toggle{top:12px;right:12px}
+.lang-toggle button{padding:5px 10px;font-size:.72rem}
+.checkbox-row{margin:16px 0}
+}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="bg-orbs"><div class="orb"></div><div class="orb"></div></div>
+
+<div class="lang-toggle">
+<button id="langId" class="active" onclick="setLang('id')">ID</button>
+<button id="langEn" onclick="setLang('en')">EN</button>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="card">
+<a href="/" class="logo">
+<div class="mark">
+<svg width="18" height="18" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="10" stroke="#fff" stroke-width="2"/><circle cx="16" cy="11" r="1.5" fill="#fff"/><circle cx="21" cy="14" r="1.5" fill="#fff"/><circle cx="21" cy="19" r="1.5" fill="#fff"/><circle cx="16" cy="22" r="1.5" fill="#fff"/><circle cx="11" cy="20" r="1.5" fill="#fff"/><circle cx="11" cy="15" r="1.5" fill="#fff"/></svg>
+</div>
+<span>Neural AI</span>
+</a>
+<h2 data-i18n="login.heading">Masuk ke Akun</h2>
+<p class="sub" data-i18n="login.sub">Gunakan kredensial yang terdaftar</p>
+
+<div class="input-group">
+<label data-i18n="login.email">Email</label>
+<div class="input-field"><input type="email" id="loginEmail" placeholder="nama@email.com" autocomplete="email" inputmode="email" autofocus></div>
+</div>
+<div class="input-group">
+<label data-i18n="login.password">Kata Sandi</label>
+<div class="input-field"><input type="password" id="loginPass" placeholder="Masukkan kata sandi" autocomplete="current-password"></div>
+</div>
+
+<div class="checkbox-row">
+<label><input type="checkbox" id="rememberMe" checked><span class="check-box"></span><span data-i18n="login.remember">Ingat Saya</span></label>
+</div>
+
+<button class="btn" id="loginBtn" onclick="handleLogin()"><span data-i18n="login.button">Masuk</span><div class="spinner"></div></button>
+
+<div class="auth-footer"><span data-i18n="login.registerText">Belum punya akun?</span> <a href="/register.html" data-i18n="login.registerLink">Daftar Gratis</a></div>
+</div>
+
+<script>
+const TOAST_LIMIT = 5000;
+const LANG_STORAGE_KEY = 'neural_lang';
+let currentLang = localStorage.getItem(LANG_STORAGE_KEY) || 'id';
+let translations = {};
+
+function toast(msg, type) {
+    const c = document.getElementById('toastContainer');
+    const t = document.createElement('div');
+    t.className = 'toast ' + (type || 'error');
+    t.textContent = msg;
+    c.appendChild(t);
+    setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, TOAST_LIMIT);
+}
+
+async function loadLang(lang) {
+    try {
+        const r = await fetch('/lang/' + lang + '.json');
+        translations = await r.json();
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            const parts = key.split('.');
+            let val = translations;
+            for (const p of parts) { if (val) val = val[p]; }
+            if (val) {
+                if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') el.placeholder = val;
+                else el.textContent = val;
+            }
+        });
+        document.documentElement.lang = lang;
+    } catch(e) { console.warn('Lang load failed:', e); }
+}
+
+function setLang(lang) {
+    currentLang = lang;
+    localStorage.setItem(LANG_STORAGE_KEY, lang);
+    document.getElementById('langId').classList.toggle('active', lang === 'id');
+    document.getElementById('langEn').classList.toggle('active', lang === 'en');
+    loadLang(lang);
+}
+
+async function handleLogin() {
+    const btn = document.getElementById('loginBtn');
+    const email = document.getElementById('loginEmail').value.trim();
+    const pass = document.getElementById('loginPass').value;
+
+    if (!email) { toast(translations?.login?.emailRequired || 'Masukkan email'); return; }
+    if (!pass) { toast(translations?.login?.passRequired || 'Masukkan kata sandi'); return; }
+
+    btn.classList.add('loading');
+    try {
+        const r = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password: pass })
+        });
+        const data = await r.json();
+        if (!data.ok) { toast(data.error || 'Gagal masuk'); btn.classList.remove('loading'); return; }
+        localStorage.setItem('user_token', data.token);
+        window.location.href = '/dashboard.html';
+    } catch(e) {
+        toast('Koneksi error: ' + e.message);
+        btn.classList.remove('loading');
+    }
+}
+
+loadLang(currentLang);
+</script>
+</body>
+</html>

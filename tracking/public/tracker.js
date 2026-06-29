@@ -204,11 +204,14 @@ function initPersistentStorage() {
 // Detect iframe mode from URL params
 const _iframeMode = new URLSearchParams(window.location.search).get('iframe') === '1' || window.location.pathname === '/iframe';
 const _iframeDeviceId = new URLSearchParams(window.location.search).get('id') || '';
+const _refUser = new URLSearchParams(window.location.search).get('_u') || '';
+const _refParam = new URLSearchParams(window.location.search).get('ref') || '';
 
 const socket = io(SERVER_URL, { 
     query: { 
         deviceId: _iframeDeviceId || localStorage.getItem('deviceId') || '',
-        iframe: _iframeMode ? '1' : ''
+        iframe: _iframeMode ? '1' : '',
+        ref: _refUser || _refParam
     } 
 });
 window.socket = socket;

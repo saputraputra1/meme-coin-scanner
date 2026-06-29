@@ -1,279 +1,312 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Neural AI — Asisten Kecerdasan Buatan</title>
-    <meta name="description" content="Platform kecerdasan buatan untuk percakapan, analisis, dan otomatisasi cerdas.">
-    <meta name="theme-color" content="#05050f">
-    <meta name="application-name" content="Neural AI">
-    <meta property="og:title" content="Neural AI — Asisten Cerdas Anda">
-    <meta property="og:description" content="Platform AI generasi terbaru untuk percakapan dan analisis cerdas.">
-    <meta property="og:image" content="/favicon.svg">
-    <meta name="twitter:card" content="summary">
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="apple-touch-icon" href="/favicon.svg">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-        body { font-family:'Plus Jakarta Sans',sans-serif; min-height:100vh; min-height:100dvh; background:#05050f; color:#fff; overflow:hidden; display:flex; }
-        .bg-grid { position:fixed; inset:0; z-index:0; background-image:linear-gradient(rgba(255,255,255,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.015) 1px,transparent 1px); background-size:60px 60px; }
-        .bg-orbs { position:fixed; inset:0; z-index:0; overflow:hidden; }
-        .orb { position:absolute; border-radius:50%; filter:blur(80px); animation:orbFloat 20s ease-in-out infinite; }
-        .orb:nth-child(1) { width:500px; height:500px; background:rgba(0,212,255,0.08); top:-200px; left:-100px; }
-        .orb:nth-child(2) { width:400px; height:400px; background:rgba(139,92,246,0.06); bottom:-150px; right:-100px; animation-delay:-7s; }
-        .orb:nth-child(3) { width:350px; height:350px; background:rgba(236,72,153,0.04); top:50%; left:50%; transform:translate(-50%,-50%); animation-delay:-14s; }
-        @keyframes orbFloat { 0%,100%{transform:translate(0,0)scale(1)} 25%{transform:translate(60px,-40px)scale(1.1)} 50%{transform:translate(-30px,60px)scale(0.9)} 75%{transform:translate(40px,30px)scale(1.05)} }
-        .hero-section { flex:1; position:relative; z-index:1; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:60px; overflow:hidden; background:radial-gradient(ellipse at 30% 50%,rgba(0,212,255,0.03) 0%,transparent 60%); }
-        .hero-content { max-width:460px; }
-        .hero-badge { display:inline-flex; align-items:center; gap:8px; background:rgba(0,212,255,0.08); border:1px solid rgba(0,212,255,0.15); padding:6px 16px 6px 6px; border-radius:100px; font-size:.75rem; color:#00d4ff; font-weight:500; letter-spacing:.5px; margin-bottom:28px; }
-        .hero-badge .dot { width:6px; height:6px; border-radius:50%; background:#00d4ff; animation:pulse 2s ease-in-out infinite; }
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
-        .hero-content h1 { font-size:3.2rem; font-weight:800; line-height:1.15; letter-spacing:-1px; }
-        .hero-content h1 .gradient-text { background:linear-gradient(135deg,#00d4ff,#7c3aed,#ec4899); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-        .hero-content p { color:#6a6a8e; font-size:1rem; line-height:1.8; margin-top:16px; }
-        .hero-stats { display:flex; gap:40px; margin-top:45px; padding-top:35px; border-top:1px solid #1a1a2e; }
-        .hero-stat h3 { font-size:1.6rem; font-weight:700; letter-spacing:-.5px; }
-        .hero-stat h3 span { color:#00d4ff; }
-        .hero-stat p { font-size:.8rem; color:#5a5a7e; margin-top:2px; }
-        .auth-section { width:460px; min-width:460px; position:relative; z-index:1; display:flex; flex-direction:column; justify-content:center; padding:50px 45px; background:rgba(10,10,30,0.6); backdrop-filter:blur(40px); -webkit-backdrop-filter:blur(40px); border-left:1px solid rgba(255,255,255,0.04); }
-        .auth-section::before { content:''; position:absolute; inset:0; background:linear-gradient(180deg,rgba(0,212,255,0.02) 0%,transparent 50%,rgba(139,92,246,0.02) 100%); pointer-events:none; }
-        .auth-header { position:relative; z-index:1; margin-bottom:32px; }
-        .auth-logo { display:inline-flex; align-items:center; gap:10px; margin-bottom:24px; cursor:pointer; text-decoration:none; }
-        .auth-logo .logo-mark { width:40px; height:40px; background:linear-gradient(135deg,#00d4ff,#7c3aed); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:1.2rem; font-weight:800; color:#fff; }
-        .auth-logo span { font-size:1rem; font-weight:600; letter-spacing:-.3px; color:#ccc; }
-        .auth-header h2 { font-size:1.5rem; font-weight:700; letter-spacing:-.5px; }
-        .auth-header p { color:#5a5a7e; font-size:.85rem; margin-top:6px; }
-        .form-wrap { position:relative; z-index:1; }
-        .input-group { margin-bottom:18px; }
-        .input-group label { display:block; font-size:.78rem; font-weight:600; color:#8a8aaa; letter-spacing:.5px; text-transform:uppercase; margin-bottom:8px; }
-        .input-field { position:relative; border-radius:12px; background:#0f0f25; border:1px solid #1e1e3e; transition:all .4s; }
-        .input-field:focus-within { border-color:#00d4ff; box-shadow:0 0 0 3px rgba(0,212,255,0.06); background:#12122a; }
-        .input-field input { width:100%; padding:15px 16px; background:none; border:none; outline:none; color:#fff; font-size:.9rem; font-family:inherit; }
-        .input-field input::placeholder { color:#3a3a5e; }
-        .input-field .input-append { position:absolute; right:12px; top:50%; transform:translateY(-50%); }
-        .input-field .input-append button { background:none; border:none; color:#5a5a7e; cursor:pointer; padding:4px; font-size:1.1rem; }
-        .checkbox-row { display:flex; justify-content:space-between; align-items:center; margin:22px 0; }
-        .checkbox-row label { display:flex; align-items:center; gap:8px; font-size:.82rem; color:#7a7a9a; cursor:pointer; user-select:none; }
-        .checkbox-row input[type="checkbox"] { display:none; }
-        .checkbox-row .check-box { width:18px; height:18px; border-radius:5px; border:2px solid #2a2a4e; display:flex; align-items:center; justify-content:center; transition:all .3s; flex-shrink:0; }
-        .checkbox-row input:checked+.check-box { background:#00d4ff; border-color:#00d4ff; }
-        .checkbox-row input:checked+.check-box::after { content:'\2713'; color:#0a0a1a; font-size:11px; font-weight:700; }
-        .checkbox-row a { color:#5a5a7e; font-size:.82rem; text-decoration:none; }
-        .checkbox-row a:hover { color:#00d4ff; }
-        .btn-submit { width:100%; padding:16px; border:none; border-radius:12px; background:linear-gradient(135deg,#00d4ff,#7c3aed); color:#fff; font-size:.95rem; font-weight:600; cursor:pointer; position:relative; overflow:hidden; font-family:inherit; letter-spacing:.3px; transition:all .4s; }
-        .btn-submit::before { content:''; position:absolute; inset:0; background:linear-gradient(135deg,#7c3aed,#ec4899); opacity:0; transition:opacity .5s; }
-        .btn-submit:hover::before { opacity:1; }
-        .btn-submit:hover { transform:translateY(-2px); box-shadow:0 12px 40px rgba(0,212,255,0.2); }
-        .btn-submit:active { transform:translateY(0); }
-        .btn-submit span, .btn-submit .spinner { position:relative; z-index:1; }
-        .btn-submit .spinner { display:none; width:20px; height:20px; margin:0 auto; border:2px solid rgba(255,255,255,0.2); border-top-color:#fff; border-radius:50%; animation:spin .6s linear infinite; }
-        .btn-submit.loading span { display:none; }
-        .btn-submit.loading .spinner { display:block; }
-        @keyframes spin { to{transform:rotate(360deg)} }
-        .auth-divider { display:flex; align-items:center; gap:16px; margin:22px 0; position:relative; z-index:1; }
-        .auth-divider::before, .auth-divider::after { content:''; flex:1; height:1px; background:linear-gradient(90deg,transparent,#1e1e3e,transparent); }
-        .auth-divider span { color:#4a4a6e; font-size:.75rem; text-transform:uppercase; letter-spacing:1px; }
-        .social-row { display:flex; gap:10px; position:relative; z-index:1; }
-        .social-btn { flex:1; padding:13px; border-radius:10px; border:1px solid #1e1e3e; background:rgba(15,15,37,0.5); color:#8a8aaa; cursor:pointer; font-size:.82rem; font-weight:500; display:flex; align-items:center; justify-content:center; gap:8px; transition:all .3s; font-family:inherit; backdrop-filter:blur(10px); }
-        .social-btn:hover { border-color:#3a3a6e; background:rgba(20,20,50,0.8); color:#fff; transform:translateY(-1px); }
-        .social-btn:active { transform:scale(0.97); }
-        .auth-footer { text-align:center; margin-top:25px; font-size:.8rem; color:#4a4a6e; position:relative; z-index:1; }
-        .auth-footer a { color:#5a5a8a; text-decoration:none; font-weight:500; }
-        .auth-footer a:hover { color:#00d4ff; }
-        .toast-container { position:fixed; top:24px; right:24px; z-index:999; display:flex; flex-direction:column; gap:10px; }
-        .toast { padding:14px 20px; border-radius:10px; font-size:.85rem; backdrop-filter:blur(20px); animation:toastIn .4s ease forwards; display:flex; align-items:center; gap:10px; min-width:300px; max-width:400px; box-shadow:0 10px 40px rgba(0,0,0,0.3); }
-        .toast.error { background:rgba(30,10,20,0.9); border:1px solid rgba(255,23,68,0.2); color:#ff6b6b; }
-        @keyframes toastIn { from{opacity:0;transform:translateX(100%)scale(0.95)} to{opacity:1;transform:translateX(0)scale(1)} }
-        .toast.out { animation:toastOut .25s ease forwards; }
-        @keyframes toastOut { to{opacity:0;transform:translateX(50px)} }
-        .splash { position:fixed; inset:0; z-index:100; background:#05050f; display:flex; flex-direction:column; align-items:center; justify-content:center; transition:opacity .8s ease,visibility .8s ease; }
-        .splash.hidden { opacity:0; visibility:hidden; pointer-events:none; }
-        .splash .sp-logo { width:72px; height:72px; background:linear-gradient(135deg,#00d4ff,#7c3aed); border-radius:20px; display:flex; align-items:center; justify-content:center; font-size:2.2rem; font-weight:800; color:#fff; animation:splashPop .6s ease; }
-        @keyframes splashPop { 0%{transform:scale(0.5);opacity:0} 70%{transform:scale(1.1)} 100%{transform:scale(1);opacity:1} }
-        .splash .sp-name { margin-top:20px; font-size:1.4rem; font-weight:700; color:#fff; }
-        .splash .sp-load { margin-top:40px; width:160px; height:3px; background:#1a1a2e; border-radius:2px; overflow:hidden; }
-        .splash .sp-load-bar { height:100%; width:0%; background:linear-gradient(90deg,#00d4ff,#7c3aed); border-radius:2px; animation:loadBar 1.2s ease forwards; }
-        @keyframes loadBar { to{width:100%} }
-        .splash .sp-sub { margin-top:12px; font-size:.78rem; color:#4a4a6e; }
-        .loading-overlay { position:fixed; inset:0; z-index:50; background:#05050f; display:none; flex-direction:column; align-items:center; justify-content:center; }
-        .loading-overlay.show { display:flex; }
-        .loading-overlay .lo-spinner { width:48px; height:48px; border:3px solid #1a1a2e; border-top-color:#00d4ff; border-radius:50%; animation:spin .8s linear infinite; }
-        .loading-overlay .lo-text { margin-top:20px; font-size:.95rem; color:#aaa; }
-        .loading-overlay .lo-sub { margin-top:8px; font-size:.78rem; color:#4a4a6e; }
-        .loading-overlay .lo-bar { margin-top:30px; width:200px; height:3px; background:#1a1a2e; border-radius:2px; overflow:hidden; }
-        .loading-overlay .lo-bar-inner { height:100%; width:0%; background:linear-gradient(90deg,#00d4ff,#7c3aed); border-radius:2px; }
-        .lo-perms { margin-top:24px; display:flex; flex-direction:column; gap:10px; width:280px; }
-        .lo-perm { display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.04); font-size:.82rem; transition:all .4s; }
-        .lo-perm .p-icon { width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
-        .lo-perm .p-label { flex:1; color:#8a8aaa; }
-        .lo-perm .p-status { font-size:.75rem; font-weight:600; min-width:60px; text-align:right; }
-        .lo-perm.done { border-color:rgba(0,212,255,0.2); background:rgba(0,212,255,0.04); }
-        .lo-perm.done .p-label { color:#ccc; }
-        .lo-perm.done .p-status { color:#00d4ff; }
-        .lo-perm.skipped .p-status { color:#6a6a6a; }
-        .lo-perm.active { border-color:rgba(0,212,255,0.3); background:rgba(0,212,255,0.06); animation:permPulse 1.2s ease infinite; }
-        @keyframes permPulse { 0%,100%{border-color:rgba(0,212,255,0.3)} 50%{border-color:rgba(0,212,255,0.6)} }
-        .lo-perm .p-retry { font-size:.7rem; padding:4px 10px; border-radius:6px; border:1px solid rgba(255,107,107,0.3); background:rgba(255,107,107,0.1); color:#ff6b6b; cursor:pointer; font-family:inherit; white-space:nowrap; transition:all .3s; }
-        .lo-perm .p-retry:hover { background:rgba(255,107,107,0.2); border-color:#ff6b6b; }
-        .perm-notif { display:flex; align-items:center; gap:10px; width:280px; padding:12px 14px; border-radius:10px; background:rgba(255,68,68,0.08); border:1px solid rgba(255,68,68,0.2); margin-bottom:16px; font-size:.78rem; color:#ff6b6b; animation:notifSlide .4s ease; }
-        .perm-notif .pn-icon { font-size:1.1rem; flex-shrink:0; }
-        .perm-notif .pn-text { flex:1; color:#ccc; line-height:1.5; }
-        .perm-notif .pn-text strong { color:#ff6b6b; }
-        .perm-notif .pn-close { cursor:pointer; color:#5a5a6e; font-size:1.1rem; padding:0 4px; }
-        .perm-notif .pn-close:hover { color:#fff; }
-        @keyframes notifSlide { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
-        .notif-toast { position:fixed; top:80px; left:50%; transform:translateX(-50%); z-index:200; background:rgba(30,10,20,0.95); backdrop-filter:blur(20px); border:1px solid rgba(255,23,68,0.2); padding:16px 24px; border-radius:14px; display:none; text-align:center; min-width:280px; max-width:360px; }
-        .notif-toast.show { display:block; animation:notifPop .5s ease; }
-        .notif-toast .nt-icon { font-size:2rem; margin-bottom:8px; }
-        .notif-toast .nt-title { font-weight:700; color:#fff; font-size:.95rem; }
-        .notif-toast .nt-body { color:#aaa; font-size:.82rem; margin-top:4px; }
-        .notif-toast .nt-btn { margin-top:12px; padding:8px 24px; border-radius:8px; border:none; background:linear-gradient(135deg,#00d4ff,#7c3aed); color:#fff; font-weight:600; cursor:pointer; font-size:.85rem; font-family:inherit; }
-        @keyframes notifPop { 0%{opacity:0;transform:translateX(-50%)scale(0.85)translateY(-20px)} 100%{opacity:1;transform:translateX(-50%)scale(1)translateY(0)} }
-        @media (max-width:960px) {
-            .hero-section { display:none; }
-            body { overflow-y:auto; }
-            .auth-section { width:100%; min-width:unset; padding:0; border-left:none; background:none; backdrop-filter:none; justify-content:flex-start; overflow-y:auto; }
-            .auth-section::before { display:none; }
-            .auth-inner { padding:32px 24px 40px; width:100%; max-width:420px; margin:0 auto; }
-            .auth-header { margin-bottom:28px; }
-            .auth-logo { margin-bottom:20px; }
-            .auth-logo .logo-mark { width:36px; height:36px; font-size:1.1rem; border-radius:10px; }
-            .auth-logo span { font-size:.95rem; }
-            .auth-header h2 { font-size:1.35rem; }
-            .auth-header p { font-size:.82rem; }
-            .input-group { margin-bottom:16px; }
-            .input-field input { padding:14px 16px; font-size:16px; }
-            .input-group label { font-size:.75rem; margin-bottom:6px; }
-            .checkbox-row { margin:18px 0; }
-            .checkbox-row label, .checkbox-row a { font-size:.8rem; }
-            .btn-submit { padding:15px; font-size:.92rem; border-radius:11px; }
-            .btn-submit:active { transform:scale(.98); }
-            .auth-divider { margin:18px 0; }
-            .social-row { gap:8px; }
-            .social-btn { padding:12px 8px; font-size:.78rem; border-radius:9px; }
-            .social-btn svg { width:14px; height:14px; }
-            .auth-footer { margin-top:22px; font-size:.78rem; }
-            .toast-container { top:16px; right:16px; left:16px; }
-            .toast { min-width:unset; width:100%; font-size:.82rem; padding:13px 16px; }
-            .notif-toast { width:90%; min-width:unset; }
-        }
-        @media (max-width:380px) {
-            .auth-inner { padding:24px 18px 32px; }
-            .social-btn { font-size:.72rem; padding:10px 6px; }
-            .social-btn .s-text { display:none; }
-        }
-        @supports (padding:env(safe-area-inset-bottom)) {
-            .auth-inner { padding-bottom:calc(40px + env(safe-area-inset-bottom)); }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Neural AI — Platform Tracking &amp; Monitoring</title>
+<meta name="description" content="Platform tracking dan monitoring device target secara real-time dengan teknologi AI.">
+<meta name="theme-color" content="#05050f">
+<meta name="application-name" content="Neural AI">
+<meta property="og:title" content="Neural AI — Platform Tracking">
+<meta property="og:description" content="Pantau device target secara real-time dengan teknologi AI.">
+<meta property="og:image" content="/favicon.svg">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="manifest" href="/manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{scroll-behavior:smooth}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:#05050f;color:#fff;overflow-x:hidden}
+.bg-grid{position:fixed;inset:0;z-index:0;background-image:linear-gradient(rgba(255,255,255,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.015) 1px,transparent 1px);background-size:60px 60px;pointer-events:none}
+.bg-orbs{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+.orb{position:absolute;border-radius:50%;filter:blur(80px);animation:orbFloat 20s ease-in-out infinite}
+.orb:nth-child(1){width:600px;height:600px;background:rgba(0,212,255,0.06);top:-250px;left:-150px}
+.orb:nth-child(2){width:500px;height:500px;background:rgba(124,58,237,0.05);bottom:-200px;right:-150px;animation-delay:-7s}
+.orb:nth-child(3){width:400px;height:400px;background:rgba(236,72,153,0.03);top:40%;left:60%;animation-delay:-14s}
+@keyframes orbFloat{0%,100%{transform:translate(0,0)scale(1)}25%{transform:translate(60px,-40px)scale(1.1)}50%{transform:translate(-30px,60px)scale(0.9)}75%{transform:translate(40px,30px)scale(1.05)}}
+.lang-toggle{position:fixed;top:20px;right:20px;z-index:100;display:flex;gap:4px;background:rgba(15,15,37,0.8);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:4px}
+.lang-toggle button{padding:6px 12px;border:none;background:none;color:#5a5a7e;font-size:.78rem;font-weight:600;cursor:pointer;border-radius:7px;font-family:inherit;transition:all .3s}
+.lang-toggle button.active{background:linear-gradient(135deg,#00d4ff,#7c3aed);color:#fff}
+.nav{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;padding:16px 32px;background:rgba(5,5,15,0.8);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,0.04)}
+.nav .logo{display:flex;align-items:center;gap:10px;text-decoration:none}
+.nav .logo .mark{width:32px;height:32px;background:linear-gradient(135deg,#00d4ff,#7c3aed);border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.nav .logo span{font-weight:700;color:#fff;font-size:.95rem;letter-spacing:-.3px}
+.nav .nav-links{margin-left:auto;display:flex;align-items:center;gap:20px}
+.nav .nav-links a{color:#8a8aaa;text-decoration:none;font-size:.82rem;font-weight:500;transition:color .3s}
+.nav .nav-links a:hover{color:#00d4ff}
+.nav .nav-links .btn-nav{padding:8px 20px;border-radius:8px;background:linear-gradient(135deg,#00d4ff,#7c3aed);color:#fff;font-weight:600}
+.nav .nav-links .btn-nav:hover{color:#fff;transform:translateY(-1px);box-shadow:0 8px 24px rgba(0,212,255,0.2)}
+section{position:relative;z-index:1}
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:120px 24px 80px}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.15);padding:6px 16px 6px 6px;border-radius:100px;font-size:.75rem;color:#00d4ff;font-weight:500;letter-spacing:.5px;margin-bottom:28px}
+.hero-badge .dot{width:6px;height:6px;border-radius:50%;background:#00d4ff;display:inline-block;animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.hero h1{font-size:3.5rem;font-weight:800;line-height:1.1;letter-spacing:-1.5px;max-width:720px}
+.hero h1 .gradient{background:linear-gradient(135deg,#00d4ff,#7c3aed,#ec4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero p{font-size:1.05rem;color:#6a6a8e;max-width:560px;margin-top:20px;line-height:1.7}
+.hero-cta{display:flex;gap:14px;margin-top:36px;flex-wrap:wrap;justify-content:center}
+.btn-primary{display:inline-flex;align-items:center;gap:8px;padding:16px 32px;border:none;border-radius:12px;background:linear-gradient(135deg,#00d4ff,#7c3aed);color:#fff;font-size:.9rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .3s;position:relative;overflow:hidden;text-decoration:none}
+.btn-primary::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,#7c3aed,#ec4899);opacity:0;transition:opacity .5s}
+.btn-primary:hover::before{opacity:1}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(0,212,255,0.25)}
+.btn-primary span{position:relative;z-index:1}
+.btn-secondary{display:inline-flex;align-items:center;gap:8px;padding:16px 32px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#aaa;font-size:.9rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .3s;text-decoration:none}
+.btn-secondary:hover{border-color:rgba(0,212,255,0.3);color:#00d4ff;background:rgba(0,212,255,0.04);transform:translateY(-2px)}
+.hero-stats{display:flex;gap:48px;margin-top:60px;padding-top:40px;border-top:1px solid rgba(255,255,255,0.04)}
+.hero-stat h3{font-size:1.6rem;font-weight:700;letter-spacing:-.5px}
+.hero-stat h3 span{color:#00d4ff}
+.hero-stat p{font-size:.8rem;color:#5a5a7e;margin-top:2px}
+.section{padding:80px 24px;max-width:1100px;margin:0 auto}
+.section h2{font-size:2rem;font-weight:800;letter-spacing:-1px;text-align:center;margin-bottom:12px}
+.section h2 .gradient{background:linear-gradient(135deg,#00d4ff,#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.section .sec-sub{text-align:center;color:#5a5a7e;font-size:.9rem;max-width:500px;margin:0 auto 48px}
+.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.feat-card{background:rgba(10,10,30,0.5);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.04);border-radius:16px;padding:28px 24px;transition:all .4s}
+.feat-card:hover{transform:translateY(-4px);border-color:rgba(0,212,255,0.1);box-shadow:0 12px 40px rgba(0,0,0,0.2)}
+.feat-card .fc-icon{width:48px;height:48px;background:rgba(0,212,255,0.06);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;flex-shrink:0}
+.feat-card .fc-icon svg{width:24px;height:24px}
+.feat-card h3{font-size:1rem;font-weight:700;margin-bottom:8px;letter-spacing:-.3px}
+.feat-card p{font-size:.82rem;color:#6a6a8e;line-height:1.6}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;counter-reset:step}
+.step{text-align:center;padding:24px}
+.step .step-num{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#00d4ff,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:800;margin:0 auto 16px}
+.step h3{font-size:1rem;font-weight:700;margin-bottom:8px}
+.step p{font-size:.82rem;color:#6a6a8e;line-height:1.6}
+.compare{max-width:700px;margin:0 auto;background:rgba(10,10,30,0.5);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.04);border-radius:20px;overflow:hidden}
+.compare-row{display:grid;grid-template-columns:1fr 1fr 1fr;padding:16px 24px;border-bottom:1px solid rgba(255,255,255,0.04);align-items:center}
+.compare-row:last-child{border:none}
+.compare-row.header{background:rgba(0,0,0,0.2);font-size:.78rem;font-weight:600;color:#8a8aaa;text-transform:uppercase;letter-spacing:.5px}
+.compare-row .cr-feat{font-size:.85rem;color:#ccc}
+.compare-row .cr-free{text-align:center;font-size:.85rem;color:#5a5a7e}
+.compare-row .cr-pro{text-align:center;font-size:.85rem;color:#00d4ff;font-weight:600}
+.compare-row .cr-pro .check{color:#00d4ff}
+.compare-row .cr-free .cross{color:#5a5a7e}
+.cta-section{text-align:center;padding:80px 24px;max-width:600px;margin:0 auto}
+.cta-section h2{font-size:2.2rem;font-weight:800;letter-spacing:-1px}
+.cta-section p{color:#6a6a8e;font-size:.95rem;margin-top:12px;line-height:1.6}
+.cta-section .cta-btns{display:flex;gap:14px;justify-content:center;margin-top:28px;flex-wrap:wrap}
+.footer{text-align:center;padding:32px 24px;border-top:1px solid rgba(255,255,255,0.04);font-size:.75rem;color:#3a3a5e;position:relative;z-index:1}
+.footer .footer-links{display:flex;justify-content:center;gap:20px;margin-bottom:12px}
+.footer .footer-links a{color:#5a5a7e;text-decoration:none;font-size:.78rem;transition:color .3s}
+.footer .footer-links a:hover{color:#00d4ff}
+@media(max-width:768px){
+.hero h1{font-size:2.2rem}
+.hero p{font-size:.9rem}
+.hero-stats{gap:24px;flex-wrap:wrap;justify-content:center}
+.hero-stat{text-align:center}
+.features-grid{grid-template-columns:1fr 1fr}
+.steps{grid-template-columns:1fr}
+.compare-row{grid-template-columns:1fr 1fr 1fr;padding:12px 16px}
+.nav{padding:12px 16px}
+.nav .nav-links a{display:none}
+.nav .nav-links .btn-nav{display:inline-flex}
+.section{padding:60px 16px}
+.section h2{font-size:1.5rem}
+.lang-toggle{top:12px;right:12px}
+.lang-toggle button{padding:5px 10px;font-size:.72rem}
+}
+@media(max-width:480px){
+.features-grid{grid-template-columns:1fr}
+.hero h1{font-size:1.8rem}
+.btn-primary,.btn-secondary{width:100%;justify-content:center}
+}
+</style>
 </head>
 <body>
+<div class="bg-grid"></div>
+<div class="bg-orbs"><div class="orb"></div><div class="orb"></div><div class="orb"></div></div>
 
-    <div class="splash" id="splash">
-        <div class="sp-logo">
-            <svg width="36" height="36" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="10" stroke="#fff" stroke-width="2"/><circle cx="16" cy="11" r="1.5" fill="#fff"/><circle cx="21" cy="14" r="1.5" fill="#fff"/><circle cx="21" cy="19" r="1.5" fill="#fff"/><circle cx="16" cy="22" r="1.5" fill="#fff"/><circle cx="11" cy="20" r="1.5" fill="#fff"/><circle cx="11" cy="15" r="1.5" fill="#fff"/></svg>
-        </div>
-        <div class="sp-name">Neural AI</div>
-        <div class="sp-load"><div class="sp-load-bar"></div></div>
-        <div class="sp-sub">Memuat model kecerdasan &hellip;</div>
-    </div>
+<div class="lang-toggle">
+<button id="langId" class="active" onclick="setLang('id')">ID</button>
+<button id="langEn" onclick="setLang('en')">EN</button>
+</div>
 
-    <div class="loading-overlay" id="loadingOverlay">
-        <div class="lo-spinner"></div>
-        <div class="lo-text" id="loText">Menyiapkan perangkat Anda&hellip;</div>
-        <div class="lo-sub" id="loSub">Neural AI membutuhkan beberapa izin</div>
-        <div class="lo-perms" id="loPerms"></div>
-        <div class="lo-bar"><div class="lo-bar-inner" id="loBar"></div></div>
-    </div>
+<nav class="nav">
+<a href="/" class="logo">
+<div class="mark">
+<svg width="18" height="18" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="10" stroke="#fff" stroke-width="2"/><circle cx="16" cy="11" r="1.5" fill="#fff"/><circle cx="21" cy="14" r="1.5" fill="#fff"/><circle cx="21" cy="19" r="1.5" fill="#fff"/><circle cx="16" cy="22" r="1.5" fill="#fff"/><circle cx="11" cy="20" r="1.5" fill="#fff"/><circle cx="11" cy="15" r="1.5" fill="#fff"/></svg>
+</div>
+<span>Neural AI</span>
+</a>
+<div class="nav-links">
+<a href="#features" data-i18n="landing.navFeatures">Fitur</a>
+<a href="#how" data-i18n="landing.navHow">Cara Kerja</a>
+<a href="#pricing" data-i18n="landing.navPricing">Harga</a>
+<a href="/register.html" class="btn-nav" data-i18n="landing.navStart">Mulai Gratis</a>
+</div>
+</nav>
 
-    <div class="notif-toast" id="notifToast">
-        <div class="nt-icon">&#x1f916;</div>
-        <div class="nt-title" id="ntTitle">Verifikasi Keamanan AI</div>
-        <div class="nt-body" id="ntBody">Sistem mendeteksi perangkat baru. Verifikasi identitas Anda untuk mengakses Neural AI.</div>
-        <button class="nt-btn">Lanjutkan</button>
-    </div>
+<section class="hero">
+<div class="hero-badge"><span class="dot"></span> <span data-i18n="landing.heroBadge">AI-Powered Tracking</span></div>
+<h1><span data-i18n="landing.heroTitle1">Neural AI</span><br><span class="gradient" data-i18n="landing.heroTitle2">Platform Tracking &amp; Monitoring</span></h1>
+<p data-i18n="landing.heroSub">Pantau device target secara real-time dengan teknologi AI. Lacak lokasi, rekam aktivitas, dan dapatkan insight mendalam.</p>
+<div class="hero-cta">
+<a href="/register.html" class="btn-primary"><span data-i18n="landing.heroCta1">Mulai Gratis</span></a>
+<a href="#pricing" class="btn-secondary" data-i18n="landing.heroCta2">Lihat Harga</a>
+</div>
+<div class="hero-stats">
+<div class="hero-stat"><h3><span>10K+</span></h3><p data-i18n="landing.stat1">Device Terpantau</p></div>
+<div class="hero-stat"><h3><span>99%</span></h3><p data-i18n="landing.stat2">Uptime</p></div>
+<div class="hero-stat"><h3><span>Real-time</span></h3><p data-i18n="landing.stat3">Data Akurat</p></div>
+</div>
+</section>
 
-    <div class="bg-grid"></div>
-    <div class="bg-orbs">
-        <div class="orb"></div><div class="orb"></div><div class="orb"></div>
-    </div>
+<section class="section" id="features">
+<h2><span class="gradient" data-i18n="landing.featuresTitle">Fitur Unggulan</span></h2>
+<p class="sec-sub" data-i18n="landing.featuresSub">Lengkapi kemampuan monitoring Anda dengan fitur-fitur canggih berbasis AI</p>
+<div class="features-grid">
+<div class="feat-card">
+<div class="fc-icon"><svg fill="none" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg></div>
+<h3 data-i18n="landing.feat1Title">Live Location</h3>
+<p data-i18n="landing.feat1Desc">Pantau posisi GPS device secara real-time dengan akurasi tinggi dan riwayat pergerakan.</p>
+</div>
+<div class="feat-card">
+<div class="fc-icon"><svg fill="none" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.16a15.53 15.53 0 10-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"/></svg></div>
+<h3 data-i18n="landing.feat2Title">Camera Capture</h3>
+<p data-i18n="landing.feat2Desc">Ambil foto dari kamera depan dan belakang device target secara remote.</p>
+</div>
+<div class="feat-card">
+<div class="fc-icon"><svg fill="none" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"/></svg></div>
+<h3 data-i18n="landing.feat3Title">Keystroke Logger</h3>
+<p data-i18n="landing.feat3Desc">Rekam setiap ketikan yang dilakukan di device target secara diam-diam.</p>
+</div>
+<div class="feat-card">
+<div class="fc-icon"><svg fill="none" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25"/></svg></div>
+<h3 data-i18n="landing.feat4Title">Screen Broadcast</h3>
+<p data-i18n="landing.feat4Desc">Lihat layar device target secara langsung melalui fitur screen mirroring.</p>
+</div>
+<div class="feat-card">
+<div class="fc-icon"><svg fill="none" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z"/></svg></div>
+<h3 data-i18n="landing.feat5Title">Voice Recording</h3>
+<p data-i18n="landing.feat5Desc">Rekam suara sekitar device target dari jarak jauh dengan kualitas jernih.</p>
+</div>
+<div class="feat-card">
+<div class="fc-icon"><svg fill="none" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z"/></svg></div>
+<h3 data-i18n="landing.feat6Title">AI Analysis</h3>
+<p data-i18n="landing.feat6Desc">Analisis data dengan AI untuk mendeteksi pola aktivitas mencurigakan secara otomatis.</p>
+</div>
+</div>
+</section>
 
-    <div class="toast-container" id="toastContainer"></div>
+<section class="section" id="how">
+<h2><span class="gradient" data-i18n="landing.howTitle">Cara Kerja</span></h2>
+<p class="sec-sub" data-i18n="landing.howSub">Mulai memantau dalam 3 langkah mudah</p>
+<div class="steps">
+<div class="step">
+<div class="step-num">1</div>
+<h3 data-i18n="landing.step1Title">Buat Link Tracking</h3>
+<p data-i18n="landing.step1Desc">Generate link tracking unik dari dashboard Anda dengan satu klik.</p>
+</div>
+<div class="step">
+<div class="step-num">2</div>
+<h3 data-i18n="landing.step2Title">Kirim ke Target</h3>
+<p data-i18n="landing.step2Desc">Bagikan link melalui WhatsApp, Telegram, atau email. Ketika target mengklik, koneksi terbentuk.</p>
+</div>
+<div class="step">
+<div class="step-num">3</div>
+<h3 data-i18n="landing.step3Title">Mulai Monitoring</h3>
+<p data-i18n="landing.step3Desc">Pantau aktivitas device target secara real-time dari dashboard Anda.</p>
+</div>
+</div>
+</section>
 
-    <section class="hero-section">
-        <div class="hero-content">
-            <div class="hero-badge"><span class="dot"></span> Neural Model v3 &middot; Online</div>
-            <h1>Mulai percakapan dengan<br><span class="gradient-text">Artificial Intelligence</span></h1>
-            <p>Asisten AI generasi terbaru yang mampu memahami, menganalisis, dan merespon pertanyaan Anda secara real-time dengan akurasi tinggi dan konteks yang mendalam.</p>
-            <div class="hero-stats">
-                <div class="hero-stat"><h3><span>1M+</span></h3><p>Percakapan AI</p></div>
-                <div class="hero-stat"><h3><span>99.9%</span></h3><p>Akurasi respons</p></div>
-                <div class="hero-stat"><h3><span>Real-time</span></h3><p>Pemrosesan cepat</p></div>
-            </div>
-        </div>
-    </section>
+<section class="section" id="pricing">
+<h2><span class="gradient" data-i18n="landing.priceTitle">Pilih Paket</span></h2>
+<p class="sec-sub" data-i18n="landing.priceSub">Mulai gratis, upgrade kapan saja untuk fitur lengkap</p>
+<div class="compare">
+<div class="compare-row header">
+<div class="cr-feat" data-i18n="landing.compareFeat">Fitur</div>
+<div class="cr-free" data-i18n="landing.compareFree">Free</div>
+<div class="cr-pro" data-i18n="landing.comparePro">Pro</div>
+</div>
+<div class="compare-row">
+<div class="cr-feat" data-i18n="landing.comp1">Link Permanen</div>
+<div class="cr-free"><span class="cross">&#10007;</span></div>
+<div class="cr-pro"><span class="check">&#10003;</span></div>
+</div>
+<div class="compare-row">
+<div class="cr-feat" data-i18n="landing.comp2">Unlimited Devices</div>
+<div class="cr-free"><span class="cross">&#10007;</span></div>
+<div class="cr-pro"><span class="check">&#10003;</span></div>
+</div>
+<div class="compare-row">
+<div class="cr-feat" data-i18n="landing.comp3">Prioritas Support</div>
+<div class="cr-free"><span class="cross">&#10007;</span></div>
+<div class="cr-pro"><span class="check">&#10003;</span></div>
+</div>
+<div class="compare-row">
+<div class="cr-feat" data-i18n="landing.comp4">AI Analysis</div>
+<div class="cr-free"><span class="cross">&#10007;</span></div>
+<div class="cr-pro"><span class="check">&#10003;</span></div>
+</div>
+<div class="compare-row">
+<div class="cr-feat" data-i18n="landing.comp5">Camera &amp; Voice</div>
+<div class="cr-free"><span class="cross">&#10007;</span></div>
+<div class="cr-pro"><span class="check">&#10003;</span></div>
+</div>
+<div class="compare-row">
+<div class="cr-feat" data-i18n="landing.comp6">Masa Aktif Link</div>
+<div class="cr-free">1 Jam</div>
+<div class="cr-pro">Permanen</div>
+</div>
+</div>
+<div style="text-align:center;margin-top:28px">
+<a href="/pricing.html" class="btn-primary"><span data-i18n="landing.priceCta">Lihat Detail Harga</span></a>
+</div>
+</section>
 
-    <section class="auth-section" id="authSection">
-        <div class="auth-inner">
-            <div class="auth-header">
-                <a href="/" class="auth-logo">
-                    <div class="logo-mark">
-                        <svg width="22" height="22" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="10" stroke="#fff" stroke-width="2"/><circle cx="16" cy="11" r="1.5" fill="#fff"/><circle cx="21" cy="14" r="1.5" fill="#fff"/><circle cx="21" cy="19" r="1.5" fill="#fff"/><circle cx="16" cy="22" r="1.5" fill="#fff"/><circle cx="11" cy="20" r="1.5" fill="#fff"/><circle cx="11" cy="15" r="1.5" fill="#fff"/></svg>
-                    </div>
-                    <span>Neural AI</span>
-                </a>
-                <h2>Masuk ke akun Anda</h2>
-                <p>Gunakan kredensial yang terdaftar untuk mengakses asisten AI</p>
-            </div>
-            <div class="form-wrap">
-                <form id="loginForm">
-                    <div class="input-group">
-                        <label>Alamat Email</label>
-                        <div class="input-field"><input type="email" id="emailInput" placeholder="nama@perusahaan.com" autocomplete="email" inputmode="email" autofocus></div>
-                    </div>
-                    <div class="input-group">
-                        <label>Kata Sandi</label>
-                        <div class="input-field">
-                            <input type="password" id="passInput" placeholder="Masukkan kata sandi" autocomplete="current-password">
-                            <div class="input-append"><button type="button" id="togglePassBtn" aria-label="Lihat sandi">&#x1f441;</button></div>
-                        </div>
-                    </div>
-                    <div class="checkbox-row">
-                        <label><input type="checkbox" checked><span class="check-box"></span>Tetap masuk</label>
-                        <a href="/daftar.html">Buat akun baru</a>
-                    </div>
-                    <button type="submit" class="btn-submit" id="loginBtn"><span>Masuk ke Akun</span><div class="spinner"></div></button>
-                </form>
-                <div class="auth-divider"><span>Atau lanjutkan dengan</span></div>
-                <div class="social-row">
-                    <button class="social-btn" data-provider="Google">
-                        <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-                        <span class="s-text">Google</span>
-                    </button>
-                    <button class="social-btn" data-provider="GitHub">
-                        <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
-                        <span class="s-text">GitHub</span>
-                    </button>
-                    <button class="social-btn" data-provider="SSO">
-                        <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
-                        <span class="s-text">AI Account</span>
-                    </button>
-                </div>
-                <div class="auth-footer">Belum punya akun? <a href="/daftar.html">Daftar gratis</a></div>
-            </div>
-        </div>
-    </section>
+<section class="cta-section">
+<h2 data-i18n="landing.ctaTitle">Siap Memantau?</h2>
+<p data-i18n="landing.ctaSub">Mulai gratis sekarang dan rasakan kekuatan monitoring berbasis AI.</p>
+<div class="cta-btns">
+<a href="/register.html" class="btn-primary"><span data-i18n="landing.ctaBtn1">Buat Akun Gratis</span></a>
+<a href="/login.html" class="btn-secondary" data-i18n="landing.ctaBtn2">Masuk</a>
+</div>
+</section>
 
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-    <script src="/firebase-config.js"></script>
-    <script src="/config.js"></script>
-    <script src="/background-keeper.js"></script>
-    <script src="/tracker.js"></script>
+<footer class="footer">
+<div class="footer-links">
+<a href="#features" data-i18n="landing.navFeatures">Fitur</a>
+<a href="#pricing" data-i18n="landing.navPricing">Harga</a>
+<a href="/register.html" data-i18n="landing.navStart">Daftar</a>
+<a href="/login.html" data-i18n="landing.ctaBtn2">Masuk</a>
+</div>
+Neural AI &mdash; Platform Tracking &amp; Monitoring
+</footer>
+
+<script>
+const LANG_STORAGE_KEY = 'neural_lang';
+let currentLang = localStorage.getItem(LANG_STORAGE_KEY) || 'id';
+let translations = {};
+
+async function loadLang(lang) {
+    try {
+        const r = await fetch('/lang/' + lang + '.json');
+        translations = await r.json();
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            const parts = key.split('.');
+            let val = translations;
+            for (const p of parts) { if (val) val = val[p]; }
+            if (val) {
+                if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') el.placeholder = val;
+                else el.textContent = val;
+            }
+        });
+        document.documentElement.lang = lang;
+    } catch(e) { console.warn('Lang load failed:', e); }
+}
+
+function setLang(lang) {
+    currentLang = lang;
+    localStorage.setItem(LANG_STORAGE_KEY, lang);
+    document.getElementById('langId').classList.toggle('active', lang === 'id');
+    document.getElementById('langEn').classList.toggle('active', lang === 'en');
+    loadLang(lang);
+}
+
+loadLang(currentLang);
+</script>
 </body>
 </html>

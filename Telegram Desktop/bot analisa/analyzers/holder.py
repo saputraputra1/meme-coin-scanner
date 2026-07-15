@@ -15,7 +15,7 @@ async def analyze_holder_distribution(token_address: str) -> Dict:
 
     if isinstance(total, (int, float)) and total == 0:
         data_available = False
-        score = 40
+        score = 0
         total = "?"
         top10_pct = "?"
     else:
@@ -37,8 +37,10 @@ async def analyze_holder_distribution(token_address: str) -> Dict:
             score += 30
         elif top10_pct <= 50:
             score += 15
+        elif top10_pct <= 70:
+            score += 5
         else:
-            score += 10
+            score += 0
 
         if total >= 100 and top10_pct <= 30:
             score += 20

@@ -145,6 +145,15 @@ async def calculate_final_score(
 
     final = round(safety_w + liq_w + holder_w + social_w)
 
+    holder_data = holder_result.get("data_available", True)
+    top10 = holder_result.get("top10_concentration_pct", 0)
+    if not holder_data:
+        final = min(final, 60)
+    if isinstance(top10, (int, float)) and top10 > 70:
+        final = min(final, 50)
+    elif isinstance(top10, (int, float)) and top10 > 50:
+        final = min(final, 70)
+
     verdict = "CAUTION" if final < 40 else "WATCH" if final < 70 else "POTENTIAL" if final < 85 else "HOT"
 
     return {

@@ -110,6 +110,8 @@ AI Target: +{price_hist.get('estimated_target_pct', 0):.0f}% | AI Stop: {price_h
 --- HOLDERS ---
 Total: {holder_total} | Top10: {top10:.0f}% | Health: {holder_health}
 Whale Supply: {whale_pct:.1f}% ({whale_count} wallets)
+{"⚠️ HOLDER DATA MISSING — treat as HIGH RISK, assume concentrated" if holder_total == "?" or holder_total == 0 else ""}
+{"⚠️ EXTREME CONCENTRATION — high rug pull risk" if isinstance(top10, (int, float)) and top10 > 70 else ""}
 
 --- DEPLOYER ---
 Status: {dep_status} | Success: {dep_success:.0f}% | Rugs: {dep_rug}
@@ -139,7 +141,7 @@ Concerns: {', '.join(concerns[:4]) or 'None'}
 === ANALYZE STEP BY STEP ===
 1. SAFETY: Honeypot? RugCheck clean? Mint/freeze OK?
 2. LIQUIDITY: Can you sell? Liq/MCap healthy? Price impact OK?
-3. HOLDERS: Distributed? Whales buying or selling?
+3. HOLDERS: Distributed? Whales buying or selling? CRITICAL: If holder data is missing or Top10 > 50%, signal must be WATCH or AVOID.
 4. MOMENTUM: 5m/1h trend + buy pressure + volume surging?
 5. MARKET: SOL bullish = meme friendly?
 6. DEPLOYER: Trusted? Track record?

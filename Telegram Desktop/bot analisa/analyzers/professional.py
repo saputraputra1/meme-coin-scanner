@@ -58,6 +58,8 @@ def determine_signal(result: Dict) -> Dict:
         concerns.append("Cannot trade")
     if isinstance(top10, (int, float)) and top10 > 60:
         concerns.append("Holder concentrated")
+    if holder_total == "?" or holder_total == 0:
+        concerns.append("Holder data unavailable — high rug risk")
     if isinstance(mcap, (int, float)) and mcap < 3000:
         concerns.append("Micro market cap")
     if isinstance(liq, (int, float)) and liq < 3000:
@@ -111,6 +113,20 @@ def determine_signal(result: Dict) -> Dict:
         signal = "BUY"
         signal_label = "BUY"
 
+    if isinstance(top10, (int, float)) and top10 > 70:
+        signal = "AVOID"
+        signal_label = "AVOID"
+        if "Extreme holder concentration" not in concerns:
+            concerns.append("Extreme holder concentration (>{:.0f}%)".format(top10))
+    elif isinstance(top10, (int, float)) and top10 > 50:
+        if signal in ("STRONG_BUY", "BUY"):
+            signal = "WATCH"
+            signal_label = "WATCH"
+    if holder_total == "?" or holder_total == 0:
+        if signal in ("STRONG_BUY", "BUY"):
+            signal = "WATCH"
+            signal_label = "WATCH"
+
     confidence = 10
     if is_honeypot is True or not can_swap:
         confidence = 0
@@ -125,6 +141,12 @@ def determine_signal(result: Dict) -> Dict:
             confidence += 2
         if isinstance(top10, (int, float)) and top10 < 30:
             confidence += 1
+        if isinstance(top10, (int, float)) and top10 > 50:
+            confidence -= 3
+        if isinstance(top10, (int, float)) and top10 > 70:
+            confidence -= 5
+        if holder_total == "?" or holder_total == 0:
+            confidence -= 4
         if sm_insider:
             confidence -= 3
         elif sm_holders > 0:

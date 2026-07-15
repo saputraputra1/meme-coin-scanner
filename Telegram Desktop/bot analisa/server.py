@@ -25,6 +25,11 @@ _poll_task = None
 
 
 async def _poll_updates():
+    try:
+        await bot.delete_webhook()
+        logger.info("Webhook cleared for polling")
+    except Exception:
+        pass
     last_update_id = 0
     while True:
         try:
@@ -65,10 +70,20 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"Failed to set webhook: {e}")
             logger.info("Falling back to polling mode")
+            try:
+                await bot.delete_webhook()
+                logger.info("Old webhook deleted")
+            except Exception:
+                pass
             _poll_task = asyncio.create_task(_poll_updates())
             logger.info("Polling mode started (fallback)")
     else:
-        logger.info("No WEBHOOK_URL set, starting polling mode...")
+        logger.info("No WEBHOOK_URL set, deleting old webhook and starting polling...")
+        try:
+            await bot.delete_webhook()
+            logger.info("Old webhook deleted")
+        except Exception:
+            pass
         _poll_task = asyncio.create_task(_poll_updates())
         logger.info("Polling mode started")
 

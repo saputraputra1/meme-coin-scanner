@@ -447,8 +447,8 @@ async def cmd_live(chat_id: str, args: str) -> str:
                     signal = pro.get("signal", "?")
                     logger.info(f"Analyzed {symbol}: score={total} signal={signal} liq=${liq:.0f} vol=${vol:.0f}")
 
-                    if total >= MIN_SCORE_FOR_ALERT and signal in ("STRONG_BUY", "BUY"):
-                        passed.append((symbol, total))
+                    if total >= MIN_SCORE_FOR_ALERT and signal in ("STRONG_BUY", "BUY", "WATCH"):
+                        passed.append((symbol, total, signal))
                         msg = format_telegram_message(analyzed)
                         from alerts.telegram import get_active_chat_ids
                         chat_ids = get_active_chat_ids()
@@ -482,12 +482,14 @@ async def cmd_live(chat_id: str, args: str) -> str:
                         skipped.append((symbol, total, signal))
 
                 if passed:
-                    logger.info(f"Cycle {cycle}: {len(passed)} signals sent: {[s[0] for s in passed]}")
+                    logger.info(f"Cycle {cycle}: {len(passed)} signals sent: {[(s[0], s[2]) for s in passed]}")
 
                 if verbose and new_pairs:
                     lines = [f"🔍 *Scan #{cycle}:* {len(new_pairs)} new tokens\n"]
-                    for sym, sc in passed:
-                        lines.append(f"  ✅ ${sym} — Score: {sc}")
+                    for item in passed:
+                        sym, sc, sig = item
+                        sig_emoji = {"STRONG_BUY": "🔥", "BUY": "🟢", "WATCH": "🟡"}.get(sig, "❓")
+                        lines.append(f"  {sig_emoji} ${sym} — Score: {sc} ({sig})")
                     for item in skipped[:10]:
                         sym, sc, sig = item
                         lines.append(f"  ❌ ${sym} — Score: {sc} ({sig})")

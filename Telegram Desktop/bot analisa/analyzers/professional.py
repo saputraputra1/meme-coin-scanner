@@ -133,14 +133,14 @@ def determine_signal(result: Dict) -> Dict:
     if is_honeypot is True or not can_swap:
         confidence = 0
     else:
-        confidence -= len(concerns) * 2
+        confidence -= len(concerns)
         confidence += len(positives)
         if deployer_rep >= 80:
             confidence += 3
         elif deployer_rep >= 60:
             confidence += 1
         if deployer_rep < 40 or deployer_status in ("CAUTION", "HIGH RISK"):
-            confidence -= 3
+            confidence -= 1
         if deployer_rug > 0:
             confidence -= 2
         if safety_score >= 80:
@@ -148,11 +148,11 @@ def determine_signal(result: Dict) -> Dict:
         if isinstance(top10, (int, float)) and top10 < 30:
             confidence += 1
         if isinstance(top10, (int, float)) and top10 > 50:
-            confidence -= 3
+            confidence -= 1
         if isinstance(top10, (int, float)) and top10 > 70:
-            confidence -= 5
+            confidence -= 3
         if holder_total == "?" or holder_total == 0:
-            confidence -= 4
+            confidence -= 2
         if sm_insider:
             confidence -= 3
         elif sm_holders > 0:

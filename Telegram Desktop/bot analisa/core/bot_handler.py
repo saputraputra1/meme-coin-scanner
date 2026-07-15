@@ -393,6 +393,12 @@ async def cmd_live(chat_id: str, args: str) -> str:
                         except Exception:
                             pass
 
+                        from core.ai_analyzer import analyze_with_ai
+                        ai_result = await analyze_with_ai(analyzed)
+                        if ai_result.get("signal") in ("STRONG_BUY", "BUY"):
+                            from alerts.telegram import send_ai_signal
+                            await send_ai_signal(analyzed, ai_result)
+
                 await asyncio.sleep(60)
         except asyncio.CancelledError:
             pass

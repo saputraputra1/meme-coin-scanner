@@ -420,10 +420,14 @@ async def cmd_live(chat_id: str, args: str) -> str:
                     if total >= MIN_SCORE_FOR_ALERT:
                         passed.append((symbol, total))
                         msg = format_telegram_message(analyzed)
-                        try:
-                            await bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown", disable_web_page_preview=True)
-                        except Exception as e:
-                            logger.error(f"Live send error to {chat_id}: {e}")
+                        from alerts.telegram import get_active_chat_ids
+                        chat_ids = get_active_chat_ids()
+                        for cid in chat_ids:
+                            try:
+                                await bot.send_message(chat_id=cid, text=msg, parse_mode="Markdown", disable_web_page_preview=True)
+                            except Exception as e:
+                                logger.error(f"Live send error to {cid}: {e}")
+                        logger.info(f"Score alert broadcast: {symbol} score={total} to {len(chat_ids)} chats")
 
                         if total >= LIVE_AI_MIN_SCORE and analyzed.get("liquidity_usd", 0) >= MIN_LIQUIDITY:
                             try:

@@ -1,8 +1,11 @@
 import asyncio
 import sys
 import os
+import logging
 from datetime import datetime, timezone
 from typing import Dict
+
+logger = logging.getLogger("memecoin-bot")
 
 
 def _format_top_holders(holders: dict) -> str:
@@ -369,6 +372,8 @@ async def cmd_live(chat_id: str, args: str) -> str:
         del _live_tasks[chat_id]
         return "⏹️ Live monitoring stopped."
 
+    verbose = args.strip().lower() in ("v", "verbose", "debug")
+
     from telegram import Bot
     bot = create_bot(TELEGRAM_BOT_TOKEN)
 
@@ -377,51 +382,97 @@ async def cmd_live(chat_id: str, args: str) -> str:
         MIN_LIQUIDITY = 5000
         MIN_AI_CONFIDENCE = 6
         seen = set()
+        cycle = 0
+        logger.info(f"Live loop started for chat {chat_id} (verbose={verbose})")
         try:
             while True:
+                cycle += 1
+                if cycle % 5 == 0:
+                    seen.clear()
+                    logger.info(f"Cycle {cycle}: Reset seen set, re-scanning tokens")
+
                 try:
                     pairs = await fetch_trending_solana()
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Live fetch error: {e}")
                     await asyncio.sleep(30)
                     continue
 
-                for pair in pairs:
+                logger.info(f"Cycle {cycle}: Fetched {len(pairs)} tokens from DexScreener")
+
+                new_pairs = [p for p in pairs if p.get("pair_address", "") not in seen]
+                passed = []
+                skipped = []
+
+                for pair in new_pairs:
                     addr = pair.get("pair_address", "")
-                    if addr in seen:
-                        continue
                     seen.add(addr)
 
-                    analyzed = await analyze_token(pair)
+                    try:
+                        analyzed = await analyze_token(pair)
+                    except Exception as e:
+                        logger.error(f"Analyze error for {addr}: {e}")
+                        continue
+
                     total = analyzed["score"]["total_score"]
+                    symbol = analyzed.get("symbol", "???")
+
                     if total >= MIN_SCORE_FOR_ALERT:
+                        passed.append((symbol, total))
                         msg = format_telegram_message(analyzed)
                         try:
                             await bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown", disable_web_page_preview=True)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.error(f"Live send error to {chat_id}: {e}")
 
-                    if total >= LIVE_AI_MIN_SCORE and analyzed.get("liquidity_usd", 0) >= MIN_LIQUIDITY:
-                        from core.ai_analyzer import analyze_with_ai
-                        ai_result = await analyze_with_ai(analyzed)
-                        sig = ai_result.get("signal")
-                        conf = ai_result.get("confidence", 0)
-                        risk = ai_result.get("risk_level", "medium")
-                        ttype = ai_result.get("trade_type", "SCALP")
-                        if (
-                            sig in ("STRONG_BUY", "BUY")
-                            and isinstance(conf, (int, float)) and conf >= MIN_AI_CONFIDENCE
-                            and risk != "high"
-                            and ttype in ("HOLD", "SCALP+HOLD")
-                        ):
-                            from alerts.telegram import send_ai_signal
-                            await send_ai_signal(analyzed, ai_result)
+                        if total >= LIVE_AI_MIN_SCORE and analyzed.get("liquidity_usd", 0) >= MIN_LIQUIDITY:
+                            try:
+                                from core.ai_analyzer import analyze_with_ai
+                                ai_result = await analyze_with_ai(analyzed)
+                                sig = ai_result.get("signal")
+                                conf = ai_result.get("confidence", 0)
+                                risk = ai_result.get("risk_level", "medium")
+                                ttype = ai_result.get("trade_type", "SCALP")
+                                if (
+                                    sig in ("STRONG_BUY", "BUY")
+                                    and isinstance(conf, (int, float)) and conf >= MIN_AI_CONFIDENCE
+                                    and risk != "high"
+                                    and ttype in ("HOLD", "SCALP+HOLD")
+                                ):
+                                    from alerts.telegram import send_ai_signal
+                                    await send_ai_signal(analyzed, ai_result)
+                                    logger.info(f"AI signal sent: {symbol} {sig} conf={conf}")
+                            except Exception as e:
+                                logger.error(f"AI analysis error for {symbol}: {e}")
+                    else:
+                        skipped.append((symbol, total))
+
+                if verbose and new_pairs:
+                    lines = [f"🔍 *Scan #{cycle}:* {len(new_pairs)} new tokens\n"]
+                    for sym, sc in passed:
+                        lines.append(f"  ✅ ${sym} — Score: {sc}")
+                    for sym, sc in skipped[:10]:
+                        lines.append(f"  ❌ ${sym} — Score: {sc}")
+                    if len(skipped) > 10:
+                        lines.append(f"  ... +{len(skipped) - 10} more skipped")
+                    lines.append(f"\nPassed: {len(passed)} | Skipped: {len(skipped)}")
+                    try:
+                        await bot.send_message(chat_id=chat_id, text="\n".join(lines), parse_mode="Markdown", disable_web_page_preview=True)
+                    except Exception as e:
+                        logger.error(f"Verbose send error: {e}")
+
+                if passed:
+                    logger.info(f"Cycle {cycle}: {len(passed)} signals sent: {[s[0] for s in passed]}")
+                else:
+                    logger.info(f"Cycle {cycle}: No signals (0/{len(new_pairs)} passed threshold)")
 
                 await asyncio.sleep(60)
         except asyncio.CancelledError:
-            pass
+            logger.info(f"Live loop cancelled for chat {chat_id}")
 
     _live_tasks[chat_id] = asyncio.create_task(live_loop())
-    return f"▶️ Live monitoring started (interval 60s, alert score >{MIN_SCORE_FOR_ALERT}). Use /live to stop."
+    mode = "verbose" if verbose else "normal"
+    return f"▶️ Live monitoring started ({mode}, interval 60s, score >{MIN_SCORE_FOR_ALERT}).\nUse `/live v` for verbose mode. `/live` to stop."
 
 
 async def cmd_pumpfun(chat_id: str, args: str) -> str:

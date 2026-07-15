@@ -241,13 +241,14 @@ async def edit_message(chat_id: str, message_id: int, new_text: str):
         bot = create_bot(TELEGRAM_BOT_TOKEN)
         try:
             await bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=new_text, parse_mode="Markdown", disable_web_page_preview=True)
-        except TelegramError:
+        except TelegramError as e:
+            logger.warning(f"Edit message Markdown failed: {e}")
             try:
                 await bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=new_text, disable_web_page_preview=True)
-            except Exception:
-                pass
-    except Exception:
-        pass
+            except Exception as e2:
+                logger.error(f"Edit message plain failed: {e2}")
+    except Exception as e:
+        logger.error(f"Edit message error: {e}")
 
 
 async def send_ai_signal(result: Dict, ai_result: Dict):

@@ -1,8 +1,10 @@
+import asyncio
 import json
 import logging
 import re
+import time
 from typing import Dict, Optional
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, RateLimitError
 from config import NVIDIA_API_KEY
 
 logger = logging.getLogger("memecoin-bot")
@@ -11,12 +13,14 @@ NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 NVIDIA_MODEL = "z-ai/glm-5.2"
 
 _client: Optional[AsyncOpenAI] = None
+_ai_semaphore = asyncio.Semaphore(1)
+_last_ai_call = 0.0
 
 
 def _get_client() -> AsyncOpenAI:
     global _client
     if _client is None:
-        _client = AsyncOpenAI(api_key=NVIDIA_API_KEY, base_url=NVIDIA_BASE_URL, timeout=30.0)
+        _client = AsyncOpenAI(api_key=NVIDIA_API_KEY, base_url=NVIDIA_BASE_URL, timeout=60.0, max_retries=5)
     return _client
 
 
@@ -176,6 +180,7 @@ TRADE TYPE RULES:
 
 
 async def analyze_with_ai(token_data: Dict) -> Dict:
+    global _last_ai_call
     if not NVIDIA_API_KEY:
         logger.warning("AI analyze skipped: no NVIDIA_API_KEY")
         return _fallback_response(token_data, "no_api_key")
@@ -184,49 +189,60 @@ async def analyze_with_ai(token_data: Dict) -> Dict:
     symbol = token_data.get("symbol", "???")
     logger.info(f"AI analyzing {symbol}...")
 
-    try:
-        response = await client.chat.completions.create(
-            model=NVIDIA_MODEL,
-            messages=[{"role": "user", "content": _build_structured_prompt(token_data)}],
-            temperature=0.3,
-            top_p=1,
-            max_tokens=2000,
-        )
+    async with _ai_semaphore:
+        delay = 1.5 - (time.time() - _last_ai_call)
+        if delay > 0:
+            await asyncio.sleep(delay)
 
-        content = ""
-        reasoning_text = ""
-        if response.choices:
-            msg = response.choices[0].message
-            content = (msg.content or "").strip()
-            reasoning_text = (getattr(msg, "reasoning_content", None) or "").strip()
+        try:
+            response = await client.chat.completions.create(
+                model=NVIDIA_MODEL,
+                messages=[{"role": "user", "content": _build_structured_prompt(token_data)}],
+                temperature=0.3,
+                top_p=1,
+                max_tokens=2000,
+            )
+            _last_ai_call = time.time()
 
-        if not content and reasoning_text:
-            lines = reasoning_text.split("\n")
-            useful = [l.strip() for l in lines if l.strip() and len(l.strip()) > 3]
-            if useful:
-                content = "\n".join(useful[-8:])
+            content = ""
+            reasoning_text = ""
+            if response.choices:
+                msg = response.choices[0].message
+                content = (msg.content or "").strip()
+                reasoning_text = (getattr(msg, "reasoning_content", None) or "").strip()
 
-        if not content and reasoning_text:
-            content = reasoning_text[:500]
+            if not content and reasoning_text:
+                lines = reasoning_text.split("\n")
+                useful = [l.strip() for l in lines if l.strip() and len(l.strip()) > 3]
+                if useful:
+                    content = "\n".join(useful[-8:])
 
-        if not content:
-            logger.warning(f"AI empty response for {symbol}")
-            return _fallback_response(token_data, "empty_response")
+            if not content and reasoning_text:
+                content = reasoning_text[:500]
 
-        parsed = _parse_json_response(content)
-        if parsed is None:
-            logger.warning(f"AI non-JSON response for {symbol}, trying text parse")
-            parsed = _parse_text_response(content, token_data)
+            if not content:
+                logger.warning(f"AI empty response for {symbol}")
+                return _fallback_response(token_data, "empty_response")
 
-        parsed = _calibrate_confidence(parsed, token_data)
-        sig = parsed.get("signal", "?")
-        conf = parsed.get("confidence", "?")
-        logger.info(f"AI result for {symbol}: {sig} conf={conf}/10")
-        return parsed
+            parsed = _parse_json_response(content)
+            if parsed is None:
+                logger.warning(f"AI non-JSON response for {symbol}, trying text parse")
+                parsed = _parse_text_response(content, token_data)
 
-    except Exception as e:
-        logger.error(f"AI analyze error for {symbol}: {e}")
-        return _fallback_response(token_data, str(e)[:100])
+            parsed = _calibrate_confidence(parsed, token_data)
+            sig = parsed.get("signal", "?")
+            conf = parsed.get("confidence", "?")
+            logger.info(f"AI result for {symbol}: {sig} conf={conf}/10")
+            return parsed
+
+        except RateLimitError as e:
+            logger.warning(f"AI rate limited for {symbol}, using professional fallback")
+            _last_ai_call = time.time()
+            return _fallback_response(token_data, f"rate_limited_{str(e)[:50]}")
+        except Exception as e:
+            logger.error(f"AI analyze error for {symbol}: {e}")
+            _last_ai_call = time.time()
+            return _fallback_response(token_data, str(e)[:100])
 
 
 _VALID_SIGNALS = {"STRONG_BUY", "BUY", "WATCH", "AVOID"}
@@ -512,6 +528,13 @@ def _fallback_response(token_data: Dict, error: str = "") -> Dict:
     pro = token_data.get("professional", {})
     signal = pro.get("signal", "BUY")
     confidence = pro.get("confidence", 5)
+
+    if isinstance(confidence, (int, float)):
+        if confidence < 5 and signal in ("STRONG_BUY", "BUY"):
+            confidence = 5
+        confidence = max(1, min(10, confidence))
+    else:
+        confidence = 5
 
     signal_map = {
         "STRONG_BUY": {"target": "+120%", "stop": "-30%"},

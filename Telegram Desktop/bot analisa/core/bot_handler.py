@@ -381,6 +381,8 @@ async def cmd_live(chat_id: str, args: str) -> str:
         LIVE_AI_MIN_SCORE = 80
         MIN_LIQUIDITY = 5000
         MIN_AI_CONFIDENCE = 6
+        PRE_FILTER_LIQUIDITY = 500
+        PRE_FILTER_VOLUME = 1000
         seen = set()
         cycle = 0
         logger.info(f"Live loop started for chat {chat_id} (verbose={verbose})")
@@ -392,21 +394,37 @@ async def cmd_live(chat_id: str, args: str) -> str:
                     logger.info(f"Cycle {cycle}: Reset seen set, re-scanning tokens")
 
                 try:
-                    pairs = await fetch_trending_solana()
+                    from core.deep_scanner import deep_scan
+                    pairs = await deep_scan(max_age_minutes=60, max_results=30)
                 except Exception as e:
                     logger.error(f"Live fetch error: {e}")
                     await asyncio.sleep(30)
                     continue
 
-                logger.info(f"Cycle {cycle}: Fetched {len(pairs)} tokens from DexScreener")
+                logger.info(f"Cycle {cycle}: Fetched {len(pairs)} tokens from 4 sources")
 
                 new_pairs = [p for p in pairs if p.get("pair_address", "") not in seen]
-                passed = []
-                skipped = []
+                if not new_pairs:
+                    logger.info(f"Cycle {cycle}: No new tokens (seen has {len(seen)} tokens)")
+                    if cycle % 5 == 0 or cycle == 1:
+                        heartbeat_emoji = "⏳"
+                        lines = [f"{heartbeat_emoji} *Live Active* — Scan #{cycle}"]
+                        lines.append("No new tokens found, waiting for next cycle...")
+                        try:
+                            await bot.send_message(chat_id=chat_id, text="\n".join(lines), disable_web_page_preview=True)
+                        except Exception:
+                            pass
+                    await asyncio.sleep(60)
+                    continue
 
                 for pair in new_pairs:
                     addr = pair.get("pair_address", "")
                     seen.add(addr)
+
+                    liq = pair.get("liquidity_usd", 0) or 0
+                    vol = pair.get("volume_24h", 0) or 0
+                    if liq < PRE_FILTER_LIQUIDITY and vol < PRE_FILTER_VOLUME:
+                        continue
 
                     try:
                         analyzed = await analyze_token(pair)
@@ -486,7 +504,7 @@ async def cmd_live(chat_id: str, args: str) -> str:
 
     _live_tasks[chat_id] = asyncio.create_task(live_loop())
     mode = "verbose" if verbose else "normal"
-    return f"▶️ Live monitoring started ({mode}, interval 60s, score >{MIN_SCORE_FOR_ALERT}).\nUse `/live v` for verbose mode. `/live` to stop."
+    return f"▶️ Live monitoring started ({mode}, interval 60s, 4 sources, min score >{MIN_SCORE_FOR_ALERT}).\nUse `/live v` for verbose mode. `/live` to stop."
 
 
 async def cmd_pumpfun(chat_id: str, args: str) -> str:

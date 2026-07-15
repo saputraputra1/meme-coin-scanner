@@ -4,6 +4,21 @@ import os
 from datetime import datetime, timezone
 from typing import Dict
 
+
+def _format_top_holders(holders: dict) -> str:
+    top_holders = holders.get("top_holders", [])
+    if not top_holders:
+        return ""
+    lines = ["\n👥 *Top Holders:*"]
+    for i, h in enumerate(top_holders[:10], 1):
+        addr = h.get("address", "?")
+        pct = h.get("pct", 0)
+        short = f"{addr[:6]}...{addr[-4:]}" if len(addr) > 12 else addr
+        link = f"https://solscan.io/account/{addr}"
+        whale = "🐋" if pct >= 5 else "🐬" if pct >= 2 else "🐟"
+        lines.append(f"  {i}. {whale} {pct:.1f}% — [{short}]({link})")
+    return "\n".join(lines)
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import TELEGRAM_BOT_TOKEN, MIN_SCORE_FOR_ALERT
@@ -184,10 +199,11 @@ def format_telegram_message(result: Dict) -> str:
         (f"📦 Bundler: {bundler_count} rapid buys\n" if bundler_count > 0 else "") +
         (f"\n✅ {', '.join(positives[:3])}" if positives else "") +
         (f"\n❌ {', '.join(concerns[:3])}" if concerns else "") +
-        f"\n{'─' * 25}\n"
-        f"💡 {summary}\n"
-        f"⏱️ {age_str} | [Chart]({result.get('url', '')})"
-    )
+          f"\n{'─' * 25}\n"
+          f"💡 {summary}\n"
+          f"{_format_top_holders(holders)}\n"
+          f"⏱️ {age_str} | [Chart]({result.get('url', '')})"
+      )
 
 
 async def handle_command(command: str, chat_id: str, args: str = "") -> str:
@@ -601,7 +617,21 @@ async def cmd_filter(chat_id: str, args: str) -> str:
     for r in results[:8]:
         s = r["score"]
         emoji = {"HOT": "🔥", "POTENTIAL": "🟢", "WATCH": "🟡", "CAUTION": "⬜"}.get(s["verdict"], "")
-        lines.append(f"{emoji} *{r['symbol']}* — {s['total_score']}/100 | ${r['market_cap']:,.0f} MCap | {r['age_minutes']:.0f}m")
+        line = f"{emoji} *{r['symbol']}* — {s['total_score']}/100 | ${r['market_cap']:,.0f} MCap | {r['age_minutes']:.0f}m"
+
+        holders = s.get("details", {}).get("holders", {})
+        top_holders = holders.get("top_holders", [])
+        if top_holders:
+            line += f"\n  👥 Top10: {holders.get('top10_concentration_pct', '?')}%"
+            for j, h in enumerate(top_holders[:5], 1):
+                addr = h.get("address", "?")
+                pct = h.get("pct", 0)
+                short = f"{addr[:6]}...{addr[-4:]}" if len(addr) > 12 else addr
+                link = f"https://solscan.io/account/{addr}"
+                whale = "🐋" if pct >= 5 else "🐬" if pct >= 2 else "🐟"
+                line += f"\n    {j}. {whale} {pct:.1f}% — [{short}]({link})"
+
+        lines.append(line)
 
     return "\n".join(lines)
 
@@ -941,6 +971,19 @@ async def cmd_deepscan(chat_id: str, args: str) -> str:
         line = f"{sig_emoji} {hp_str} *{r['symbol']}* — {s['total_score']}/100 | ${r['market_cap']:,.0f} | {pc_str} | {age_str}"
         if i < 3 and chart_link:
             line += f" | [Chart]({chart_link})"
+
+        holders = s.get("details", {}).get("holders", {})
+        top_holders = holders.get("top_holders", [])
+        if i < 3 and top_holders:
+            line += f"\n👥 Holders: {holders.get('total_holders', '?')} | Top10: {holders.get('top10_concentration_pct', '?')}%"
+            for j, h in enumerate(top_holders[:5], 1):
+                addr = h.get("address", "?")
+                pct = h.get("pct", 0)
+                short = f"{addr[:6]}...{addr[-4:]}" if len(addr) > 12 else addr
+                link = f"https://solscan.io/account/{addr}"
+                whale = "🐋" if pct >= 5 else "🐬" if pct >= 2 else "🐟"
+                line += f"\n  {j}. {whale} {pct:.1f}% — [{short}]({link})"
+
         lines.append(line)
 
     return "\n".join(lines)
@@ -1110,6 +1153,7 @@ async def cmd_ai_analysis(chat_id: str, args: str) -> str:
         msg += f"Risks: {', '.join(risks_list[:3])}\n"
 
     charts = analyzed.get("charts", {})
+    msg += _format_top_holders(holders)
     msg += f"\nAge: {age_str}"
     if charts.get("price_chart"):
         msg += f" | [Price Chart]({charts['price_chart']})"
@@ -1211,7 +1255,19 @@ async def cmd_gem_hunter(chat_id: str, args: str) -> str:
         if chart_link:
             line += f" | [Chart]({chart_link})"
         if g.get("url"):
-            line += f" | [DexScreener]({g['url']})"
+            line += f" | [DexScreener]({g['url']}")"
+
+        holders_data = g["score"]["details"].get("holders", {})
+        top_holders = holders_data.get("top_holders", [])
+        if top_holders:
+            line += f"\n  👥 Top Wallets:"
+            for j, h in enumerate(top_holders[:5], 1):
+                addr = h.get("address", "?")
+                pct = h.get("pct", 0)
+                short = f"{addr[:6]}...{addr[-4:]}" if len(addr) > 12 else addr
+                link = f"https://solscan.io/account/{addr}"
+                whale = "🐋" if pct >= 5 else "🐬" if pct >= 2 else "🐟"
+                line += f"\n    {j}. {whale} {pct:.1f}% — [{short}]({link})"
 
         lines.append(line)
 

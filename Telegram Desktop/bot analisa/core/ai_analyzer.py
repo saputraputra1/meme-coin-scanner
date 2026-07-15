@@ -1,8 +1,11 @@
 import json
+import logging
 import re
 from typing import Dict, Optional
 from openai import AsyncOpenAI
 from config import NVIDIA_API_KEY
+
+logger = logging.getLogger("memecoin-bot")
 
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 NVIDIA_MODEL = "z-ai/glm-5.2"
@@ -174,9 +177,12 @@ TRADE TYPE RULES:
 
 async def analyze_with_ai(token_data: Dict) -> Dict:
     if not NVIDIA_API_KEY:
+        logger.warning("AI analyze skipped: no NVIDIA_API_KEY")
         return _fallback_response(token_data, "no_api_key")
 
     client = _get_client()
+    symbol = token_data.get("symbol", "???")
+    logger.info(f"AI analyzing {symbol}...")
 
     try:
         response = await client.chat.completions.create(
@@ -204,19 +210,22 @@ async def analyze_with_ai(token_data: Dict) -> Dict:
             content = reasoning_text[:500]
 
         if not content:
+            logger.warning(f"AI empty response for {symbol}")
             return _fallback_response(token_data, "empty_response")
 
         parsed = _parse_json_response(content)
         if parsed is None:
-            # Model didn't return clean JSON (e.g. wrapped in prose/markdown) —
-            # fall back to the old line-by-line text parser rather than
-            # silently misreading the signal.
+            logger.warning(f"AI non-JSON response for {symbol}, trying text parse")
             parsed = _parse_text_response(content, token_data)
 
         parsed = _calibrate_confidence(parsed, token_data)
+        sig = parsed.get("signal", "?")
+        conf = parsed.get("confidence", "?")
+        logger.info(f"AI result for {symbol}: {sig} conf={conf}/10")
         return parsed
 
     except Exception as e:
+        logger.error(f"AI analyze error for {symbol}: {e}")
         return _fallback_response(token_data, str(e)[:100])
 
 

@@ -153,8 +153,9 @@ async def analyze_token(pair_data: dict) -> dict:
             ai_result = await analyze_with_ai(result)
             if ai_result and ai_result.get("signal"):
                 result["ai"] = ai_result
-        except Exception:
-            pass
+                logger.info(f"AI analysis stored for {result.get('symbol', '???')}: {ai_result.get('signal')} conf={ai_result.get('confidence')}")
+        except Exception as e:
+            logger.warning(f"AI analysis failed for {result.get('symbol', '???')}: {e}")
 
     return result
 

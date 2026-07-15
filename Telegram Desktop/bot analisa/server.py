@@ -31,9 +31,11 @@ async def _poll_updates():
     except Exception:
         pass
     last_update_id = 0
+    conflict_count = 0
     while True:
         try:
             updates = await bot.get_updates(offset=last_update_id + 1, timeout=30)
+            conflict_count = 0
             for update in updates:
                 last_update_id = update.update_id
                 if not update.message or not update.message.text:
@@ -51,8 +53,18 @@ async def _poll_updates():
         except asyncio.CancelledError:
             break
         except Exception as e:
-            logger.error(f"Polling error: {e}")
-            await asyncio.sleep(5)
+            err_msg = str(e)
+            if "Conflict" in err_msg or "409" in err_msg:
+                conflict_count += 1
+                wait = min(30 * conflict_count, 120)
+                logger.warning(f"Polling conflict (another instance running?). Waiting {wait}s... (attempt {conflict_count})")
+                if conflict_count >= 5:
+                    logger.error("Too many conflicts. Another bot instance is running. Stopping polling.")
+                    break
+                await asyncio.sleep(wait)
+            else:
+                logger.error(f"Polling error: {e}")
+                await asyncio.sleep(5)
 
 
 @asynccontextmanager

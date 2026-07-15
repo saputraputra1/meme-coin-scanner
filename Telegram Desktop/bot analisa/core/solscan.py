@@ -1,7 +1,9 @@
 from typing import Dict, List, Optional
+import logging
 from utils.client import HttpClient
 
 SOLSCAN_BASE = "https://public-api.solscan.io"
+logger = logging.getLogger("memecoin-bot")
 
 
 async def get_token_holders(token_address: str, limit: int = 20) -> List[Dict]:
@@ -11,10 +13,14 @@ async def get_token_holders(token_address: str, limit: int = 20) -> List[Dict]:
             f"{SOLSCAN_BASE}/token/holders",
             params={"tokenAddress": token_address, "limit": limit, "offset": 0},
         )
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Solscan API error for {token_address[:8]}: {e}")
         return []
 
-    return data.get("data", []) if isinstance(data, dict) else []
+    result = data.get("data", []) if isinstance(data, dict) else []
+    if not result:
+        logger.info(f"Solscan returned empty holders for {token_address[:8]}")
+    return result
 
 
 async def get_token_meta(token_address: str) -> Optional[Dict]:

@@ -1,13 +1,34 @@
+import asyncio
+import logging
 from typing import Dict
 from config import HELIUS_API_KEY
 from core.solscan import analyze_holders
 
+logger = logging.getLogger("memecoin-bot")
+
 
 async def analyze_holder_distribution(token_address: str) -> Dict:
-    data = await analyze_holders(token_address)
+    data = None
+    sources_tried = []
 
-    if data["total_holders"] == 0:
-        data = await _analyze_holders_helius(token_address)
+    try:
+        data = await asyncio.wait_for(analyze_holders(token_address), timeout=10)
+        sources_tried.append("solscan")
+    except Exception as e:
+        logger.warning(f"Solscan holder fetch failed for {token_address[:8]}: {e}")
+
+    if data is None or data["total_holders"] == 0:
+        try:
+            data = await asyncio.wait_for(_analyze_holders_helius(token_address), timeout=15)
+            sources_tried.append("helius")
+        except Exception as e:
+            logger.warning(f"Helius holder fallback failed for {token_address[:8]}: {e}")
+
+    if data is None:
+        logger.error(f"All holder sources failed for {token_address[:8]}")
+        data = {"total_holders": 0, "top10_pct": 100, "top10_count": 0, "is_concentrated": True, "risk": "high", "top_holders": []}
+
+    logger.info(f"Holder data for {token_address[:8]}: source={'+'.join(sources_tried)} total={data.get('total_holders')} top10={data.get('top10_pct')}% top_holders={len(data.get('top_holders', []))}")
 
     score = 0
     total = data["total_holders"]
@@ -78,25 +99,30 @@ async def _analyze_holders_helius(token_address: str) -> Dict:
     try:
         holders = await client.get_token_largest_holders(token_address, limit=20)
         if not holders:
+            logger.warning(f"Helius returned no holders for {token_address[:8]}")
             return {"total_holders": 0, "top10_pct": 100, "top10_count": 0, "is_concentrated": True, "risk": "high", "top_holders": []}
 
-        total_held = sum(h["ui_amount"] for h in holders)
-        if total_held == 0:
-            total_held = 1
+        supply_data = await client.get_token_supply(token_address)
+        if supply_data:
+            total_supply = supply_data.get("ui_amount", 0) or 1
+        else:
+            total_supply = sum(h["ui_amount"] for h in holders) or 1
 
         top10_amount = sum(h["ui_amount"] for h in holders[:10])
-        top10_pct = (top10_amount / total_held) * 100
+        top10_pct = (top10_amount / total_supply) * 100
 
         risk = "low" if top10_pct < 30 else "medium" if top10_pct < 60 else "high"
 
         top_holders = []
         for h in holders[:10]:
-            pct = (h["ui_amount"] / total_held) * 100 if total_held > 0 else 0
+            pct = (h["ui_amount"] / total_supply) * 100 if total_supply > 0 else 0
             top_holders.append({
                 "address": h.get("address", "unknown"),
                 "pct": round(pct, 2),
                 "amount": h.get("ui_amount", 0),
             })
+
+        logger.info(f"Helius holder data: total_supply={total_supply:.2f} top10_pct={top10_pct:.2f}% holders={len(holders)}")
 
         return {
             "total_holders": len(holders),
@@ -106,7 +132,8 @@ async def _analyze_holders_helius(token_address: str) -> Dict:
             "risk": risk,
             "top_holders": top_holders,
         }
-    except Exception:
+    except Exception as e:
+        logger.error(f"Helius holder error for {token_address[:8]}: {e}")
         return {"total_holders": 0, "top10_pct": 100, "top10_count": 0, "is_concentrated": True, "risk": "high", "top_holders": []}
     finally:
         await client.close()

@@ -447,7 +447,7 @@ async def cmd_live(chat_id: str, args: str) -> str:
                     signal = pro.get("signal", "?")
                     logger.info(f"Analyzed {symbol}: score={total} signal={signal} liq=${liq:.0f} vol=${vol:.0f}")
 
-                    if total >= MIN_SCORE_FOR_ALERT:
+                    if total >= MIN_SCORE_FOR_ALERT and signal in ("STRONG_BUY", "BUY"):
                         passed.append((symbol, total))
                         msg = format_telegram_message(analyzed)
                         from alerts.telegram import get_active_chat_ids
@@ -457,7 +457,7 @@ async def cmd_live(chat_id: str, args: str) -> str:
                                 await bot.send_message(chat_id=cid, text=msg, parse_mode="Markdown", disable_web_page_preview=True)
                             except Exception as e:
                                 logger.error(f"Live send error to {cid}: {e}")
-                        logger.info(f"Score alert broadcast: {symbol} score={total} to {len(chat_ids)} chats")
+                        logger.info(f"Score alert broadcast: {symbol} score={total} signal={signal} to {len(chat_ids)} chats")
 
                         if total >= LIVE_AI_MIN_SCORE and analyzed.get("liquidity_usd", 0) >= MIN_LIQUIDITY:
                             try:
@@ -479,7 +479,7 @@ async def cmd_live(chat_id: str, args: str) -> str:
                             except Exception as e:
                                 logger.error(f"AI analysis error for {symbol}: {e}")
                     else:
-                        skipped.append((symbol, total))
+                        skipped.append((symbol, total, signal))
 
                 if passed:
                     logger.info(f"Cycle {cycle}: {len(passed)} signals sent: {[s[0] for s in passed]}")
@@ -488,8 +488,9 @@ async def cmd_live(chat_id: str, args: str) -> str:
                     lines = [f"🔍 *Scan #{cycle}:* {len(new_pairs)} new tokens\n"]
                     for sym, sc in passed:
                         lines.append(f"  ✅ ${sym} — Score: {sc}")
-                    for sym, sc in skipped[:10]:
-                        lines.append(f"  ❌ ${sym} — Score: {sc}")
+                    for item in skipped[:10]:
+                        sym, sc, sig = item
+                        lines.append(f"  ❌ ${sym} — Score: {sc} ({sig})")
                     if len(skipped) > 10:
                         lines.append(f"  ... +{len(skipped) - 10} more skipped")
                     lines.append(f"\nPassed: {len(passed)} | Skipped: {len(skipped)}")

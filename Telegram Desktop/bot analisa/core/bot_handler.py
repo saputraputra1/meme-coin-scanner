@@ -369,6 +369,9 @@ async def cmd_live(chat_id: str, args: str) -> str:
     bot = create_bot(TELEGRAM_BOT_TOKEN)
 
     async def live_loop():
+        LIVE_AI_MIN_SCORE = 80
+        MIN_LIQUIDITY = 5000
+        MIN_AI_CONFIDENCE = 6
         seen = set()
         try:
             while True:
@@ -393,9 +396,19 @@ async def cmd_live(chat_id: str, args: str) -> str:
                         except Exception:
                             pass
 
+                    if total >= LIVE_AI_MIN_SCORE and analyzed.get("liquidity_usd", 0) >= MIN_LIQUIDITY:
                         from core.ai_analyzer import analyze_with_ai
                         ai_result = await analyze_with_ai(analyzed)
-                        if ai_result.get("signal") in ("STRONG_BUY", "BUY"):
+                        sig = ai_result.get("signal")
+                        conf = ai_result.get("confidence", 0)
+                        risk = ai_result.get("risk_level", "medium")
+                        ttype = ai_result.get("trade_type", "SCALP")
+                        if (
+                            sig in ("STRONG_BUY", "BUY")
+                            and isinstance(conf, (int, float)) and conf >= MIN_AI_CONFIDENCE
+                            and risk != "high"
+                            and ttype in ("HOLD", "SCALP+HOLD")
+                        ):
                             from alerts.telegram import send_ai_signal
                             await send_ai_signal(analyzed, ai_result)
 

@@ -171,6 +171,18 @@ async def send_telegram_alert(result: Dict):
         hp_text = "🛑 YES" if honeypot is True else "✅ No" if honeypot is False else "❓ ?"
         swap_text = "✅ Yes" if can_swap is True else "🛑 No" if can_swap is False else "❓ ?"
 
+        top_holders = holders.get("top_holders", [])
+        holder_lines = ""
+        if top_holders:
+            holder_lines = "\n👥 Top Holders:\n"
+            for i, h in enumerate(top_holders[:10], 1):
+                addr = h.get("address", "?")
+                pct = h.get("pct", 0)
+                short = f"{addr[:6]}...{addr[-4:]}" if len(addr) > 12 else addr
+                link = f"https://solscan.io/account/{addr}"
+                whale = "🐋" if pct >= 5 else "🐬" if pct >= 2 else "🐟"
+                holder_lines += f"  {i}. {whale} {pct:.1f}% — [{short}]({link})\n"
+
         msg = (
             f"{verdict_emoji} *NEW SIGNAL: ${symbol}* ({total}/100)\n"
             f"*{name}*\n"
@@ -181,6 +193,7 @@ async def send_telegram_alert(result: Dict):
             f"👥 Holders: {holders.get('total_holders', 0)} (Top10: {holders.get('top10_concentration_pct', 0)}%)\n"
             f"🌐 Social: {', '.join(social.get('links', [])) or 'none'}\n"
             f"⏱️ Age: {age:.0f}m" if isinstance(age, (int, float)) else f"⏱️ Age: {age}"
+            f"{holder_lines}"
             f"\n📊 {url}"
         )
 
@@ -263,6 +276,18 @@ async def send_ai_signal(result: Dict, ai_result: Dict):
             msg += f"✅ {', '.join(strengths[:2])}\n"
         if risks:
             msg += f"⚠️ {', '.join(risks[:2])}\n"
+
+        holders = result.get("score", {}).get("details", {}).get("holders", {})
+        top_holders = holders.get("top_holders", [])
+        if top_holders:
+            msg += f"\n👥 Top Holders:\n"
+            for i, h in enumerate(top_holders[:10], 1):
+                addr = h.get("address", "?")
+                pct = h.get("pct", 0)
+                short = f"{addr[:6]}...{addr[-4:]}" if len(addr) > 12 else addr
+                link = f"https://solscan.io/account/{addr}"
+                whale = "🐋" if pct >= 5 else "🐬" if pct >= 2 else "🐟"
+                msg += f"  {i}. {whale} {pct:.1f}% — [{short}]({link})\n"
 
         age_str = f"{age:.0f}m" if isinstance(age, (int, float)) else str(age)
         msg += f"⏱️ {age_str}"

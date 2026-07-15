@@ -67,6 +67,7 @@ async def analyze_holder_distribution(token_address: str) -> Dict:
         "risk": risk,
         "health": health,
         "distribution_bar": bar,
+        "top_holders": data.get("top_holders", []),
     }
 
 
@@ -77,7 +78,7 @@ async def _analyze_holders_helius(token_address: str) -> Dict:
     try:
         holders = await client.get_token_largest_holders(token_address, limit=20)
         if not holders:
-            return {"total_holders": 0, "top10_pct": 100, "top10_count": 0, "is_concentrated": True, "risk": "high"}
+            return {"total_holders": 0, "top10_pct": 100, "top10_count": 0, "is_concentrated": True, "risk": "high", "top_holders": []}
 
         total_held = sum(h["ui_amount"] for h in holders)
         if total_held == 0:
@@ -88,14 +89,24 @@ async def _analyze_holders_helius(token_address: str) -> Dict:
 
         risk = "low" if top10_pct < 30 else "medium" if top10_pct < 60 else "high"
 
+        top_holders = []
+        for h in holders[:10]:
+            pct = (h["ui_amount"] / total_held) * 100 if total_held > 0 else 0
+            top_holders.append({
+                "address": h.get("address", "unknown"),
+                "pct": round(pct, 2),
+                "amount": h.get("ui_amount", 0),
+            })
+
         return {
             "total_holders": len(holders),
             "top10_pct": round(top10_pct, 2),
             "top10_count": min(10, len(holders)),
             "is_concentrated": top10_pct > 50,
             "risk": risk,
+            "top_holders": top_holders,
         }
     except Exception:
-        return {"total_holders": 0, "top10_pct": 100, "top10_count": 0, "is_concentrated": True, "risk": "high"}
+        return {"total_holders": 0, "top10_pct": 100, "top10_count": 0, "is_concentrated": True, "risk": "high", "top_holders": []}
     finally:
         await client.close()

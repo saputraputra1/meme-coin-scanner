@@ -37,6 +37,7 @@ async def analyze_holders(token_address: str) -> Dict:
             "top10_count": 0,
             "is_concentrated": True,
             "risk": "high",
+            "top_holders": [],
         }
 
     total_supply = sum(float(h.get("amount", 0)) for h in holders)
@@ -48,10 +49,21 @@ async def analyze_holders(token_address: str) -> Dict:
 
     risk = "low" if top10_pct < 30 else "medium" if top10_pct < 60 else "high"
 
+    top_holders = []
+    for h in holders[:10]:
+        amount = float(h.get("amount", 0))
+        pct = (amount / total_supply) * 100 if total_supply > 0 else 0
+        top_holders.append({
+            "address": h.get("owner", h.get("address", "unknown")),
+            "pct": round(pct, 2),
+            "amount": amount,
+        })
+
     return {
         "total_holders": total_holders,
         "top10_pct": round(top10_pct, 2),
         "top10_count": min(10, total_holders),
         "is_concentrated": top10_pct > 50,
         "risk": risk,
+        "top_holders": top_holders,
     }

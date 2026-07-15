@@ -254,7 +254,7 @@ async def start_auto_signal():
 
                 r = item["result"]
                 ai_result = item["ai_result"]
-                r["charts"] = generate_charts_for_token(r)
+                r["charts"] = await generate_charts_for_token(r)
 
                 from alerts.telegram import send_ai_signal
                 await send_ai_signal(r, ai_result)
@@ -332,7 +332,7 @@ async def start_auto_signal():
                     logger.info(f"Signal queued (cycle cap reached): {r['symbol']} ({ai_result['signal']}, {ai_result['confidence']}/10)")
                     continue
 
-                r["charts"] = generate_charts_for_token(r)
+                r["charts"] = await generate_charts_for_token(r)
 
                 from alerts.telegram import send_ai_signal
                 await send_ai_signal(r, ai_result)

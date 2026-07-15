@@ -1,9 +1,26 @@
+import asyncio
 import json
 import urllib.parse
 from typing import Dict, List
+import httpx
 
 
-def generate_score_chart_url(result: Dict, width: int = 400, height: int = 200) -> str:
+async def _shorten_chart_url(chart_config: dict, width: int, height: int) -> str:
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                "https://quickchart.io/v1/chart/create",
+                json={"chart": chart_config, "width": width, "height": height},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return data.get("url", "")
+    except Exception:
+        pass
+    return ""
+
+
+async def generate_score_chart_url(result: Dict, width: int = 400, height: int = 200) -> str:
     score = result.get("score", {})
     breakdown = score.get("breakdown", {})
 
@@ -74,12 +91,15 @@ def generate_score_chart_url(result: Dict, width: int = 400, height: int = 200) 
         }
     }
 
+    short = await _shorten_chart_url(chart_config, width, height)
+    if short:
+        return short
     config_str = json.dumps(chart_config)
     encoded = urllib.parse.quote(config_str)
     return f"https://quickchart.io/chart?w={width}&h={height}&c={encoded}"
 
 
-def generate_price_chart_url(symbol: str, current_price: float, change_24h: float, prices: List[float] = None, width: int = 500, height: int = 180) -> str:
+async def generate_price_chart_url(symbol: str, current_price: float, change_24h: float, prices: List[float] = None, width: int = 500, height: int = 180) -> str:
     if prices and len(prices) > 1:
         data = prices
     else:
@@ -132,12 +152,15 @@ def generate_price_chart_url(symbol: str, current_price: float, change_24h: floa
         }
     }
 
+    short = await _shorten_chart_url(chart_config, width, height)
+    if short:
+        return short
     config_str = json.dumps(chart_config)
     encoded = urllib.parse.quote(config_str)
     return f"https://quickchart.io/chart?w={width}&h={height}&c={encoded}"
 
 
-def generate_holder_chart_url(top10_pct, top5_pct=None, width=350, height=150):
+async def generate_holder_chart_url(top10_pct, top5_pct=None, width=350, height=150):
     labels = ["Top5", "Top10"] if top5_pct else ["Top10"]
     values = [top5_pct, top10_pct] if top5_pct else [top10_pct]
     max_val = max(top10_pct if isinstance(top10_pct, (int, float)) else 100, 100)
@@ -172,21 +195,29 @@ def generate_holder_chart_url(top10_pct, top5_pct=None, width=350, height=150):
         }
     }
 
+    short = await _shorten_chart_url(chart_config, width, height)
+    if short:
+        return short
     config_str = json.dumps(chart_config)
     encoded = urllib.parse.quote(config_str)
     return f"https://quickchart.io/chart?w={width}&h={height}&c={encoded}"
 
 
-def generate_charts_for_token(result: Dict) -> Dict:
+async def generate_charts_for_token(result: Dict) -> Dict:
     price = result.get("price_usd", 0)
     change_24h = result.get("price_change_24h", 0) or 0
     holders = result.get("score", {}).get("details", {}).get("holders", {})
 
-    return {
-        "score_chart": generate_score_chart_url(result),
-        "price_chart": generate_price_chart_url(result.get("symbol", "?"), price, change_24h),
-        "holder_chart": generate_holder_chart_url(
+    score_chart, price_chart, holder_chart = await asyncio.gather(
+        generate_score_chart_url(result),
+        generate_price_chart_url(result.get("symbol", "?"), price, change_24h),
+        generate_holder_chart_url(
             holders.get("top10_concentration_pct", 0) if isinstance(holders.get("top10_concentration_pct"), (int, float)) else 50,
             top5_pct=None,
         ),
+    )
+    return {
+        "score_chart": score_chart,
+        "price_chart": price_chart,
+        "holder_chart": holder_chart,
     }

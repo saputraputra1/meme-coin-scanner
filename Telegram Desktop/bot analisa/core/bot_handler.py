@@ -147,7 +147,7 @@ async def analyze_token(pair_data: dict) -> dict:
             result["score"]["smart_money_adj"] = sm["score_adjustment"]
 
         result["professional"] = determine_signal(result)
-        result["charts"] = generate_charts_for_token(result)
+        result["charts"] = await generate_charts_for_token(result)
 
         try:
             ai_result = await analyze_with_ai(result)
@@ -1376,7 +1376,7 @@ async def cmd_ai_analysis(chat_id: str, args: str) -> str:
     analyzed = await analyze_token(info)
 
     if not analyzed.get("charts"):
-        analyzed["charts"] = generate_charts_for_token(analyzed)
+        analyzed["charts"] = await generate_charts_for_token(analyzed)
 
     ai_result = await analyze_with_ai(analyzed)
     analyzed["ai_analysis"] = ai_result

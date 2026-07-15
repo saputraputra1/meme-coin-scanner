@@ -51,6 +51,7 @@ from core.smart_money import (
     analyze_smart_money, record_early_buyers, add_smart_wallet, remove_smart_wallet, load_smart_wallets,
 )
 from core.narratives import classify_narrative, track_sector_momentum, get_narrative_momentum
+from alerts.charts import generate_charts_for_token
 from utils.client import HttpClient
 from utils.export import export_json, export_csv
 
@@ -168,7 +169,7 @@ async def analyze_token(pair_data: dict) -> dict:
                 result["score"]["smart_money_adj"] = sm["score_adjustment"]
 
         result["professional"] = determine_signal(result)
-        result["charts"] = generate_charts_for_token(result)
+        result["charts"] = await generate_charts_for_token(result)
 
     return result
 

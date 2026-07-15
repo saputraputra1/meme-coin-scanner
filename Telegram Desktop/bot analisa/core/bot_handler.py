@@ -111,10 +111,15 @@ async def analyze_token(pair_data: dict) -> dict:
 
         if deployer.get("found"):
             stats = deployer.get("stats", {})
-            if stats.get("status") == "trusted":
-                result["score"]["total_score"] = min(100, result["score"]["total_score"] + 5)
-            elif stats.get("status") == "suspicious":
-                result["score"]["total_score"] = max(0, result["score"]["total_score"] - 15)
+            rep = stats.get("reputation_score", 50)
+            if rep >= 80:
+                result["score"]["total_score"] = min(100, result["score"]["total_score"] + 8)
+            elif rep >= 60:
+                result["score"]["total_score"] = min(100, result["score"]["total_score"] + 4)
+            elif rep < 40:
+                result["score"]["total_score"] = max(0, result["score"]["total_score"] - 10)
+            elif rep < 20:
+                result["score"]["total_score"] = max(0, result["score"]["total_score"] - 25)
 
         result["narratives"] = classify_narrative(
             pair_data.get("base_token", {}).get("name", ""),
@@ -438,6 +443,9 @@ async def cmd_live(chat_id: str, args: str) -> str:
 
                     total = analyzed["score"]["total_score"]
                     symbol = analyzed.get("symbol", "???")
+                    pro = analyzed.get("professional", {})
+                    signal = pro.get("signal", "?")
+                    logger.info(f"Analyzed {symbol}: score={total} signal={signal} liq=${liq:.0f} vol=${vol:.0f}")
 
                     if total >= MIN_SCORE_FOR_ALERT:
                         passed.append((symbol, total))

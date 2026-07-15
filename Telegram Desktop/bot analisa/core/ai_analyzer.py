@@ -5,12 +5,12 @@ import re
 import time
 from typing import Dict, Optional
 from openai import AsyncOpenAI, RateLimitError
-from config import NVIDIA_API_KEY
+from config import GROQ_API_KEY, GROQ_MODEL
 
 logger = logging.getLogger("memecoin-bot")
 
-NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
-NVIDIA_MODEL = "z-ai/glm-5.2"
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+AI_MODEL = GROQ_MODEL
 
 _client: Optional[AsyncOpenAI] = None
 _ai_semaphore = asyncio.Semaphore(1)
@@ -20,7 +20,7 @@ _last_ai_call = 0.0
 def _get_client() -> AsyncOpenAI:
     global _client
     if _client is None:
-        _client = AsyncOpenAI(api_key=NVIDIA_API_KEY, base_url=NVIDIA_BASE_URL, timeout=60.0, max_retries=5)
+        _client = AsyncOpenAI(api_key=GROQ_API_KEY, base_url=GROQ_BASE_URL, timeout=60.0, max_retries=5)
     return _client
 
 
@@ -181,8 +181,8 @@ TRADE TYPE RULES:
 
 async def analyze_with_ai(token_data: Dict) -> Dict:
     global _last_ai_call
-    if not NVIDIA_API_KEY:
-        logger.warning("AI analyze skipped: no NVIDIA_API_KEY")
+    if not GROQ_API_KEY:
+        logger.warning("AI analyze skipped: no GROQ_API_KEY")
         return _fallback_response(token_data, "no_api_key")
 
     client = _get_client()
@@ -196,7 +196,7 @@ async def analyze_with_ai(token_data: Dict) -> Dict:
 
         try:
             response = await client.chat.completions.create(
-                model=NVIDIA_MODEL,
+                model=AI_MODEL,
                 messages=[{"role": "user", "content": _build_structured_prompt(token_data)}],
                 temperature=1,
                 top_p=1,

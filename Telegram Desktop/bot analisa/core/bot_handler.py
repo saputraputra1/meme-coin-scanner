@@ -232,6 +232,9 @@ async def handle_command(command: str, chat_id: str, args: str = "") -> str:
         "wlremove": cmd_wl_remove,
         "export": cmd_export,
         "filter": cmd_filter,
+        "cf": cmd_custom_filter,
+        "pa": cmd_price_alert,
+        "pricealert": cmd_price_alert,
         "whale": cmd_whale_scan,
         "whales": cmd_whale_scan,
         "whaleadd": cmd_whale_add,
@@ -290,6 +293,8 @@ async def cmd_start(chat_id: str, args: str) -> str:
         "/scan — Quick scan trending token\n"
         "/deepscan — Deep scan 50+ coins from 4 sources\n"
         "/filter <preset> — Custom filter (aggressive/balanced/conservative)\n"
+        "/cf liq=5000 mcap=500k age=30 score=60 — Custom filter sendiri\n"
+        "/pa <addr> <+/-pct> — Set price alert (harga naik/turun)\n"
         "/pumpfun — Scan Pump.fun launches\n"
         "/score <addr> — Analisis token by address\n"
         "/ai <addr> — AI analysis + charts\n"
@@ -590,6 +595,8 @@ async def cmd_help(chat_id: str, args: str) -> str:
         "/scan — Quick scan trending Solana meme coins\n"
         "/deepscan — Deep scan 50+ coins from 4 sources\n"
         "/filter <preset> — Custom filter (aggressive/balanced/conservative)\n"
+        "/cf liq=5000 mcap=500k age=30 score=60 — Custom filter sendiri\n"
+        "/pa <addr> <+/-pct> — Set price alert\n"
         "/pumpfun — Scan Pump.fun token terbaru\n"
         "/score <addr> — Analisis token berdasarkan address\n"
         "/ai <addr> — AI analysis + charts\n"
@@ -770,6 +777,153 @@ async def cmd_filter(chat_id: str, args: str) -> str:
         lines.append(line)
 
     return "\n".join(lines)
+
+
+def _parse_custom_filter_args(args: str) -> Dict:
+    params = {}
+    for part in args.split():
+        if "=" in part:
+            key, val = part.split("=", 1)
+            key = key.strip().lower()
+            val = val.strip().lower().replace(",", "")
+            if val.endswith("k"):
+                params[key] = float(val[:-1]) * 1000
+            elif val.endswith("m"):
+                params[key] = float(val[:-1]) * 1000000
+            else:
+                try:
+                    params[key] = float(val)
+                except ValueError:
+                    pass
+    return params
+
+
+async def cmd_custom_filter(chat_id: str, args: str) -> str:
+    if not args:
+        return (
+            "Usage: `/cf liq=5000 mcap=500k age=30 score=60 holders=50`\n"
+            "Parameter: liq, mcap, age, score, holders"
+        )
+
+    params = _parse_custom_filter_args(args)
+    liq_min = params.get("liq", 0)
+    mcap_max = params.get("mcap", 999999999)
+    age_max = params.get("age", 999)
+    score_min = params.get("score", 0)
+    holders_min = params.get("holders", 0)
+
+    from core.deep_scanner import deep_scan
+    try:
+        pairs = await deep_scan(max_age_minutes=int(age_max) + 30, max_results=40)
+    except Exception:
+        return "❌ Gagal fetch data."
+
+    results = []
+    for pair in pairs:
+        liq = pair.get("liquidity_usd", 0) or 0
+        mcap = pair.get("market_cap", 0) or 0
+        age = pair.get("age_minutes", 0) or 0
+
+        if liq < liq_min or mcap > mcap_max or age > age_max:
+            continue
+
+        analyzed = await analyze_token(pair)
+        total = analyzed["score"]["total_score"]
+        pro = analyzed.get("professional", {})
+        signal = pro.get("signal", "?")
+        holders_data = analyzed.get("score", {}).get("details", {}).get("holders", {})
+        holder_count = holders_data.get("total_holders", 0)
+
+        if total >= score_min and (holders_min == 0 or (isinstance(holder_count, (int, float)) and holder_count >= holders_min)):
+            if signal in ("STRONG_BUY", "BUY", "WATCH"):
+                results.append(analyzed)
+
+    results.sort(key=lambda x: x["score"]["total_score"], reverse=True)
+
+    if not results:
+        return f"🔍 No tokens match filter (liq>${liq_min:,.0f} mcap<${mcap_max:,.0f} age<{age_max}m score>={score_min})"
+
+    lines = [f"🔍 *Custom Filter* ({len(results)} tokens)\n"]
+    lines.append(f"liq>${liq_min:,.0f} | mcap<${mcap_max:,.0f} | age<{age_max}m | score>={score_min}")
+    if holders_min > 0:
+        lines.append(f"holders>={holders_min}")
+    lines.append("")
+
+    for r in results[:8]:
+        s = r["score"]
+        pro = r.get("professional", {})
+        signal = pro.get("signal", "?")
+        sig_emoji = {"STRONG_BUY": "🔥", "BUY": "🟢", "WATCH": "🟡"}.get(signal, "❓")
+        total = s["total_score"]
+        line = f"{sig_emoji} *{r['symbol']}* — {total}/100 ({signal}) | ${r['market_cap']:,.0f} MCap | {r['age_minutes']:.0f}m"
+
+        holders = s.get("details", {}).get("holders", {})
+        top_holders = holders.get("top_holders", [])
+        if top_holders:
+            line += f"\n  👥 Top10: {holders.get('top10_concentration_pct', '?')}%"
+            for j, h in enumerate(top_holders[:5], 1):
+                addr = h.get("address", "?")
+                pct = h.get("pct", 0)
+                short = f"{addr[:6]}...{addr[-4:]}" if len(addr) > 12 else addr
+                link = f"https://solscan.io/account/{addr}"
+                whale = "🐋" if pct >= 5 else "🐬" if pct >= 2 else "🐟"
+                line += f"\n    {j}. {whale} {pct:.1f}% — [{short}]({link})"
+
+        lines.append(line)
+
+    return "\n".join(lines)
+
+
+async def cmd_price_alert(chat_id: str, args: str) -> str:
+    from core.price_alert import add_price_alert, get_alerts_for_chat, remove_price_alert
+    from core.dexscreener import get_token_info
+
+    parts = args.strip().split()
+    if not parts:
+        alerts = get_alerts_for_chat(chat_id)
+        if not alerts:
+            return "📋 No price alerts.\nUsage: `/pa <address> <+/-pct>`\nExample: `/pa F6N6Q... -20` or `/pa F6N6Q... +50`"
+        lines = [f"📋 *Price Alerts* ({len(alerts)})\n"]
+        for a in alerts:
+            direction = "📉" if a.get("alert_down_pct", 0) < 0 else "📈"
+            pct = a.get("alert_down_pct", 0) if a.get("alert_down_pct", 0) < 0 else a.get("alert_up_pct", 0)
+            lines.append(f"  {direction} *{a['symbol']}* — {pct:+.0f}% (entry: ${a.get('entry_price', 0):.8f})")
+        return "\n".join(lines)
+
+    if parts[0].lower() in ("rm", "remove", "del", "delete") and len(parts) >= 2:
+        addr = parts[1].strip()
+        if remove_price_alert(chat_id, addr):
+            return f"✅ Alert removed for `{addr[:12]}...`"
+        return f"❌ No alert found for `{addr[:12]}...`"
+
+    if len(parts) < 2:
+        return "Usage: `/pa <address> <+/-pct>`\nExample: `/pa F6N6Q... -20`"
+
+    addr = parts[0].strip()
+    try:
+        pct = float(parts[1].replace("%", ""))
+    except ValueError:
+        return "❌ Invalid percentage. Example: `/pa F6N6Q... -20` or `/pa F6N6Q... +50`"
+
+    info = await get_token_info(addr)
+    if not info:
+        return f"❌ Token not found: `{addr[:12]}...`"
+
+    symbol = info.get("base_token", {}).get("symbol", "???")
+    entry_price = info.get("price_usd", 0)
+
+    if entry_price <= 0:
+        return f"❌ Price not available for {symbol}"
+
+    alert = add_price_alert(chat_id, addr, symbol, entry_price, pct)
+    direction = "drop" if pct < 0 else "rise"
+    return (
+        f"✅ *Price Alert Set*\n"
+        f"Token: *{symbol}*\n"
+        f"Entry: ${entry_price:.8f}\n"
+        f"Alert when: {pct:+.0f}% ({direction})\n"
+        f"Remove: `/pa rm {addr[:12]}`"
+    )
 
 
 async def cmd_whale_scan(chat_id: str, args: str) -> str:

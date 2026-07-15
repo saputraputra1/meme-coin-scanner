@@ -28,7 +28,7 @@ async def check_rug_indicators(token_address: str, entry_price: float, entry_lp:
                 price_change = ((current_price - entry_price) / entry_price) * 100
                 result["price_change_pct"] = round(price_change, 2)
 
-                if price_change < -50:
+                if price_change < -30:
                     result["is_rug"] = True
                     result["triggers"].append(f"Price dropped {price_change:.0f}%")
 
@@ -36,7 +36,7 @@ async def check_rug_indicators(token_address: str, entry_price: float, entry_lp:
                 lp_change = ((current_lp - entry_lp) / entry_lp) * 100
                 result["lp_change_pct"] = round(lp_change, 2)
 
-                if lp_change < -50:
+                if lp_change < -30:
                     result["is_rug"] = True
                     result["triggers"].append(f"LP removed {lp_change:.0f}%")
 
@@ -222,4 +222,69 @@ async def position_monitor_loop():
             await monitor_positions()
         except Exception as e:
             logger.error(f"Position monitor loop error: {e}")
+        try:
+            await _check_all_price_alerts()
+        except Exception as e:
+            logger.error(f"Price alert check error: {e}")
         await asyncio.sleep(180)
+
+
+async def _check_all_price_alerts():
+    from core.price_alert import _load_alerts, check_price_alerts
+    from core.dexscreener import get_token_info
+    from utils.telegram_client import create_bot
+    from config import TELEGRAM_BOT_TOKEN
+
+    alerts = _load_alerts()
+    active = [a for a in alerts if a.get("status") == "active"]
+    if not active:
+        return
+
+    current_prices = {}
+    for alert in active:
+        addr = alert["token_address"]
+        if addr in current_prices:
+            continue
+        try:
+            info = await get_token_info(addr)
+            if info:
+                current_prices[addr] = info.get("price_usd", 0)
+        except Exception:
+            pass
+
+    triggered = check_price_alerts(current_prices)
+    if not triggered:
+        return
+
+    if not TELEGRAM_BOT_TOKEN:
+        return
+
+    bot = create_bot(TELEGRAM_BOT_TOKEN)
+    for t in triggered:
+        chat_id = t["chat_id"]
+        symbol = t.get("symbol", "???")
+        change = t.get("change_pct", 0)
+        alert_type = t.get("alert_type", "")
+        entry = t.get("entry_price", 0)
+        trigger = t.get("trigger_price", 0)
+
+        if alert_type == "drop":
+            emoji = "📉"
+            label = "PRICE DROP"
+        else:
+            emoji = "📈"
+            label = "PRICE RISE"
+
+        msg = (
+            f"{emoji} *{label} ALERT*\n"
+            f"*{symbol}* — {change:+.1f}%\n"
+            f"Entry: ${entry:.8f}\n"
+            f"Current: ${trigger:.8f}\n"
+            f"{'─' * 25}\n"
+            f"Alert triggered and removed."
+        )
+        try:
+            await bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown", disable_web_page_preview=True)
+            logger.info(f"Price alert sent: {symbol} {change:+.1f}% to {chat_id}")
+        except Exception as e:
+            logger.error(f"Price alert send error to {chat_id}: {e}")

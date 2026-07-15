@@ -104,6 +104,8 @@ async def lifespan(app: FastAPI):
             ("start", "Mulai bot dan deteksi chat"),
             ("scan", "Quick scan trending meme coin"),
             ("filter", "Custom filter scan"),
+            ("cf", "Custom filter dengan parameter sendiri"),
+            ("pa", "Set price alert (harga naik/turun)"),
             ("live", "Live scan real-time"),
             ("pumpfun", "Scan Pump.fun launches"),
             ("deepscan", "Deep scan 50+ coins"),

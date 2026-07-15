@@ -29,7 +29,9 @@ def determine_signal(result: Dict) -> Dict:
     is_honeypot = safety_checks.get("honeypot_detected", False)
     has_lp_risk = safety_checks.get("has_lp_risk", False)
     deployer_status = deployer.get("status", "unknown")
+    deployer_status = deployer.get("status", "unknown")
     deployer_rug = deployer.get("rug_count", 0)
+    deployer_rep = deployer.get("reputation_score", 0)
     social_links = social.get("links", [])
     is_bundled = bundler.get("is_bundled", False) if bundler else False
     can_swap = safety_checks.get("can_swap", False)
@@ -52,7 +54,7 @@ def determine_signal(result: Dict) -> Dict:
         concerns.append("LP unlock risk")
     if is_bundled:
         concerns.append("Bundled launch")
-    if deployer_status == "suspicious" or deployer_rug > 0:
+    if deployer_status in ("CAUTION", "HIGH RISK") or deployer_rug > 0 or deployer_rep < 40:
         concerns.append("Deployer rug history")
     if not can_swap or price_impact >= 90:
         concerns.append("Cannot trade")
@@ -75,7 +77,7 @@ def determine_signal(result: Dict) -> Dict:
 
     if safety_score >= 80:
         positives.append("Excellent safety")
-    if deployer_status == "trusted":
+    if deployer_status in ("TRUSTED", "RELIABLE") or deployer_rep >= 60:
         positives.append("Trusted deployer")
     if isinstance(top10, (int, float)) and top10 < 25:
         positives.append("Good distribution")
@@ -133,10 +135,14 @@ def determine_signal(result: Dict) -> Dict:
     else:
         confidence -= len(concerns) * 2
         confidence += len(positives)
-        if deployer_status == "trusted":
-            confidence += 2
-        if deployer_status == "suspicious":
+        if deployer_rep >= 80:
+            confidence += 3
+        elif deployer_rep >= 60:
+            confidence += 1
+        if deployer_rep < 40 or deployer_status in ("CAUTION", "HIGH RISK"):
             confidence -= 3
+        if deployer_rug > 0:
+            confidence -= 2
         if safety_score >= 80:
             confidence += 2
         if isinstance(top10, (int, float)) and top10 < 30:

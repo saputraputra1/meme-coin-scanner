@@ -125,18 +125,29 @@ async def get_deployer_stats(wallet_address: str) -> Dict:
         success_rate = (success_count / total_known * 100) if total_known > 0 else 0
         rug_rate = (rug_count / total_known * 100) if total_known > 0 else 0
 
-        status = "trusted" if success_rate >= 70 and rug_count == 0 else "suspicious" if rug_count > 0 else "unknown"
+        from core.rug_history import check_deployer_rug_history
+        rug_hist = check_deployer_rug_history(wallet_address)
+        db_rug_count = rug_hist.get("total_rugs", 0)
+        total_rugs = rug_count + db_rug_count
+
+        reputation = _calculate_reputation_score(
+            total_tokens=len(related_tokens),
+            success_rate=success_rate,
+            rug_count=total_rugs,
+            total_checked=total_known,
+        )
 
         result = {
             "wallet": wallet_address,
             "total_tokens_found": len(related_tokens),
             "tokens_checked": total_known,
             "successful": success_count,
-            "rug_count": rug_count,
+            "rug_count": total_rugs,
             "unknown_count": unknown_count,
             "success_rate": round(success_rate, 1),
             "rug_rate": round(rug_rate, 1),
-            "status": status,
+            "status": reputation["label"],
+            "reputation_score": reputation["score"],
             "recent_tokens": [t["mint"] for t in token_creations[:5]],
             "last_updated": datetime.now(timezone.utc).isoformat(),
         }
@@ -173,4 +184,68 @@ async def analyze_token_deployer(token_address: str) -> Dict:
         "found": True,
         "creator": creator,
         "stats": stats,
+    }
+
+
+REPUTATION_LABELS = {
+    (80, 100): ("TRUSTED", "✅", "0"),
+    (60, 79): ("RELIABLE", "🟢", "1"),
+    (40, 59): ("NEUTRAL", "🟡", "2"),
+    (20, 39): ("CAUTION", "🟠", "3"),
+    (0, 19): ("HIGH RISK", "🔴", "4"),
+}
+
+
+def reputation_label(score: int) -> tuple:
+    for (lo, hi), (label, emoji, level) in REPUTATION_LABELS.items():
+        if lo <= score <= hi:
+            return label, emoji, level
+    return "UNKNOWN", "❓", "9"
+
+
+def _calculate_reputation_score(total_tokens: int, success_rate: float,
+                                 rug_count: int, total_checked: int) -> Dict:
+    score = 50
+
+    if total_tokens >= 30:
+        score += 15
+    elif total_tokens >= 10:
+        score += 10
+    elif total_tokens >= 5:
+        score += 5
+    elif total_tokens < 3 and total_checked > 0:
+        score -= 15
+
+    if success_rate >= 90:
+        score += 20
+    elif success_rate >= 70:
+        score += 10
+    elif success_rate >= 50:
+        score += 0
+    elif total_checked > 0:
+        score -= 10
+
+    if rug_count == 0:
+        score += 5
+    elif rug_count == 1:
+        score -= 25
+    elif rug_count <= 3:
+        score -= 35
+    else:
+        score -= 50
+
+    if total_tokens > 0 and total_checked > 0 and success_rate >= 80 and rug_count == 0:
+        score = max(score, 75)
+
+    if total_tokens == 0 and total_checked == 0:
+        score = 30
+
+    score = max(0, min(100, score))
+    label, emoji, level = reputation_label(score)
+
+    return {
+        "score": score,
+        "label": label,
+        "emoji": emoji,
+        "level": level,
     }

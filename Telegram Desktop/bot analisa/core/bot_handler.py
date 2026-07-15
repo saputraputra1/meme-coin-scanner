@@ -177,6 +177,7 @@ def format_telegram_message(result: Dict) -> str:
     age_str = f"{age:.0f}m" if isinstance(age, (int, float)) else str(age)
     deployer_status = deployer.get("status", "unknown")
     deployer_rug = deployer.get("rug_count", 0)
+    deployer_rep = deployer.get("reputation_score", 0)
     bundler_count = bundler.get("rapid_buys_under_60s", 0) if bundler else 0
     holder_total = holders.get("total_holders", "?")
     top10 = holders.get("top10_concentration_pct", "?")
@@ -195,7 +196,7 @@ def format_telegram_message(result: Dict) -> str:
         f"🌐 Social: {', '.join(social.get('links', [])) or '-'}"
         + (f" | @{social.get('twitter_handle')}" if social.get('twitter_handle') else "")
         + f"\n" +
-        (f"🕵️ Deployer: {deployer_status} (rug: {deployer_rug})\n" if deployer_status != "unknown" or deployer_rug else "") +
+        (f"🕵️ Deployer: {deployer_status} ({deployer_rep}/100) | rug: {deployer_rug}\n" if deployer_status not in ("unknown", "UNKNOWN") or deployer_rug else "") +
         (f"📦 Bundler: {bundler_count} rapid buys\n" if bundler_count > 0 else "") +
         (f"\n✅ {', '.join(positives[:3])}" if positives else "") +
         (f"\n❌ {', '.join(concerns[:3])}" if concerns else "") +
@@ -239,8 +240,9 @@ async def handle_command(command: str, chat_id: str, args: str = "") -> str:
         "buy": cmd_buy,
         "sell": cmd_sell,
         "positions": cmd_positions,
-        "rugcheck": cmd_rugcheck,
-        "compare": cmd_compare,
+          "rugcheck": cmd_rugcheck,
+          "rughistory": cmd_rughistory,
+          "compare": cmd_compare,
         "verify": cmd_verify_token,
         "report": cmd_report,
         "sellmode": cmd_sell_mode,
@@ -283,6 +285,8 @@ async def cmd_start(chat_id: str, args: str) -> str:
         "\n"
         "*Safety & Monitoring:*\n"
         "/live — Mulai/stop live monitoring\n"
+        "/rughistory — Database riwayat rug deployer\n"
+        "/rugcheck <addr> — Deteksi rug real-time\n"
         "/spikes — Cek volume spike terbaru\n"
         "/bundler <addr> — Deteksi aktivitas bundler/insider\n"
         "\n"
@@ -463,6 +467,8 @@ async def cmd_help(chat_id: str, args: str) -> str:
         "\n"
         "*Safety & Monitoring:*\n"
         "/live — Mulai/stop live monitoring\n"
+        "/rughistory — Database riwayat rug deployer\n"
+        "/rugcheck <addr> — Deteksi rug real-time\n"
         "/spikes — Cek volume spike terbaru\n"
         "/bundler <addr> — Deteksi aktivitas bundler/insider\n"
         "\n"
@@ -862,12 +868,13 @@ async def cmd_deployer(chat_id: str, args: str) -> str:
     stats = result.get("stats", {})
     creator = result.get("creator", "?")
     status = stats.get("status", "unknown")
-    status_emoji = {"trusted": "✅", "suspicious": "🛑", "unknown": "❓"}.get(status, "❓")
+    rep_score = stats.get("reputation_score", 0)
+    rep_emoji = {"TRUSTED": "✅", "RELIABLE": "🟢", "NEUTRAL": "🟡", "CAUTION": "🟠", "HIGH RISK": "🔴"}.get(status, "❓")
 
     return (
-        f"{status_emoji} *Deployer Check*\n"
+        f"{rep_emoji} *Deployer Check*\n"
         f"Creator: `{creator}`\n"
-        f"Status: *{status.upper()}*\n"
+        f"Status: *{status}* | Reputation: *{rep_score}/100*\n"
         f"Tokens deployed: {stats.get('total_tokens_found', '?')}\n"
         f"Success rate: {stats.get('success_rate', 0):.0f}% | Rug: {stats.get('rug_count', 0)}\n"
         f"Last updated: {stats.get('last_updated', '?')[:10]}"
@@ -894,12 +901,13 @@ async def cmd_deployer_add(chat_id: str, args: str) -> str:
     name = " ".join(parts[1:]) if len(parts) > 1 else ""
 
     stats = await get_deployer_stats(addr)
+    rep_score = stats.get("reputation_score", 0)
     result = add_deployer(addr, name)
     return (
         f"✅ Deployer added: *{result['name']}*\n"
+        f"Reputation: {rep_score}/100 | "
         f"Success rate: {stats.get('success_rate', 0):.0f}% | "
-        f"Rug: {stats.get('rug_count', 0)} | "
-        f"Status: {stats.get('status', 'unknown')}"
+        f"Rug: {stats.get('rug_count', 0)}"
     )
 
 
@@ -1313,9 +1321,11 @@ def _calculate_gem_score(result: Dict, vol_mcap_ratio: float) -> int:
         score += 5
 
     deployer = result.get("deployer_check", {}).get("stats", {})
-    if deployer.get("status") == "trusted":
+    dep_status = deployer.get("status", "unknown")
+    dep_rep = deployer.get("reputation_score", 0)
+    if dep_status in ("TRUSTED", "RELIABLE") or dep_rep >= 60:
         score += 10
-    elif deployer.get("status") == "unknown":
+    elif dep_rep >= 40:
         score += 5
 
     holders = result["score"]["details"].get("holders", {}).get("total_holders", 0)
@@ -1590,6 +1600,45 @@ async def cmd_rugcheck(chat_id: str, args: str) -> str:
         f"LP: {rug['lp_change_pct']:.0f}%\n"
         f"Triggers: None"
     )
+
+
+async def cmd_rughistory(chat_id: str, args: str) -> str:
+    from core.rug_history import get_rug_stats, get_rug_events, check_deployer_rug_history
+
+    if args:
+        deployer = args.strip()
+        hist = check_deployer_rug_history(deployer)
+        if not hist.get("has_rug_history"):
+            return f"✅ Deployer `{deployer[:12]}...` tidak memiliki riwayat rug."
+        lines = [f"🛑 *Deployer Rug History*\n`{deployer[:12]}...`\n"]
+        lines.append(f"Total rugs: *{hist['total_rugs']}*")
+        lines.append(f"Last rug: {hist.get('last_rug', '?')[:10]}\n")
+        for e in hist.get("events", [])[:10]:
+            lines.append(f"• {e.get('detected_at', '?')[:10]} — ${e.get('token_symbol', '?')} "
+                         f"({e.get('reason', '?')})")
+        return "\n".join(lines)
+
+    stats = get_rug_stats(30)
+    events = get_rug_events(20)
+
+    lines = [f"📊 *Rug History Database*\n"]
+    lines.append(f"Total events: {stats['total_rugs']}")
+    lines.append(f"Unique deployers: {stats['unique_deployers']}")
+    lines.append(f"Last 30 days: {stats.get('rugs_last_30d', 0)}")
+
+    if stats["top_deployers"]:
+        lines.append(f"\n🔴 *Top Rug Deployers:*")
+        for d in stats["top_deployers"][:5]:
+            lines.append(f"  • `{d['address'][:12]}...` — {d['total_rugs']}x rugs (last: {d['last_rug']})")
+
+    if events:
+        lines.append(f"\n📋 *Recent Events:*")
+        for e in events[:10]:
+            lines.append(f"  • {e.get('detected_at', '?')[:10]} — ${e.get('token_symbol', '?')} "
+                         f"| drop: {e.get('price_drop_pct', 0):.0f}% | {e.get('reason', '?')}")
+
+    lines.append(f"\nGunakan /rughistory <deployer_address> untuk cek spesifik.")
+    return "\n".join(lines)
 
 
 async def cmd_compare(chat_id: str, args: str) -> str:

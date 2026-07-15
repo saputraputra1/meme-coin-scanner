@@ -118,12 +118,28 @@ async def analyze_token(pair_data: dict) -> dict:
         if deployer.get("found"):
             stats = deployer.get("stats", {})
             deployer_status = stats.get("status", "unknown")
-            if deployer_status == "trusted":
-                result["score"]["total_score"] = min(100, result["score"]["total_score"] + 5)
-                result["score"]["deployer_bonus"] = "+5 trusted"
-            elif deployer_status == "suspicious":
+            reputation_score = stats.get("reputation_score", 50)
+
+            if reputation_score >= 80:
+                result["score"]["total_score"] = min(100, result["score"]["total_score"] + 8)
+                result["score"]["deployer_bonus"] = f"+8 trusted ({reputation_score}/100)"
+            elif reputation_score >= 60:
+                result["score"]["total_score"] = min(100, result["score"]["total_score"] + 4)
+                result["score"]["deployer_bonus"] = f"+4 reliable ({reputation_score}/100)"
+            elif reputation_score >= 40:
+                result["score"]["deployer_note"] = f"neutral ({reputation_score}/100)"
+            elif reputation_score >= 20:
+                result["score"]["total_score"] = max(0, result["score"]["total_score"] - 10)
+                result["score"]["deployer_penalty"] = f"-10 caution ({reputation_score}/100)"
+            else:
+                result["score"]["total_score"] = max(0, result["score"]["total_score"] - 25)
+                result["score"]["deployer_penalty"] = f"-25 high risk ({reputation_score}/100)"
+
+            from core.rug_history import check_deployer_rug_history
+            rug_hist = check_deployer_rug_history(deployer.get("creator", ""))
+            if rug_hist.get("has_rug_history"):
                 result["score"]["total_score"] = max(0, result["score"]["total_score"] - 15)
-                result["score"]["deployer_penalty"] = "-15 rug history"
+                result["score"]["rug_history"] = f"-15 ({rug_hist['total_rugs']} previous rugs)"
 
         result["narratives"] = classify_narrative(
             pair_data.get("base_token", {}).get("name", ""),
@@ -893,7 +909,7 @@ async def deployer_check_mode():
     creator = result.get("creator", "?")
     status = stats.get("status", "?")
 
-    color = {"trusted": "green", "suspicious": "red", "unknown": "yellow"}.get(status, "white")
+    color = {"TRUSTED": "green", "RELIABLE": "green", "NEUTRAL": "yellow", "CAUTION": "yellow", "HIGH RISK": "red", "UNKNOWN": "yellow"}.get(status, "white")
 
     console.print(f"\n[bold]Creator Wallet:[/bold] [dim]{creator}[/dim]")
     console.print(f"Status: [{color}]{status.upper()}[/{color}]")

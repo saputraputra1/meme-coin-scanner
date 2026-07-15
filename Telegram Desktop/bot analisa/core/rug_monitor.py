@@ -39,6 +39,23 @@ async def check_rug_indicators(token_address: str, entry_price: float, entry_lp:
                 if lp_change < -50:
                     result["is_rug"] = True
                     result["triggers"].append(f"LP removed {lp_change:.0f}%")
+
+        if result["is_rug"]:
+            try:
+                from core.rug_history import add_rug_event
+                from core.deployer_check import find_creator_wallet
+                deployer = await find_creator_wallet(token_address) or ""
+                add_rug_event(
+                    token_address=token_address,
+                    token_symbol="",
+                    deployer=deployer,
+                    price_drop_pct=result["price_change_pct"],
+                    lp_removed_pct=result["lp_change_pct"],
+                    mcap_before=info.get("market_cap", 0) if info else 0,
+                    reason="; ".join(result["triggers"]),
+                )
+            except Exception as e:
+                logger.error(f"Failed to record rug event: {e}")
     except Exception as e:
         logger.error(f"Rug check error: {e}")
 

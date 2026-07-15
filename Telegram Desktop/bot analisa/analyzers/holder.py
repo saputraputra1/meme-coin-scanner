@@ -12,17 +12,17 @@ async def analyze_holder_distribution(token_address: str) -> Dict:
     sources_tried = []
 
     try:
-        data = await asyncio.wait_for(analyze_holders(token_address), timeout=10)
-        sources_tried.append("solscan")
+        data = await asyncio.wait_for(_analyze_holders_helius(token_address), timeout=15)
+        sources_tried.append("helius")
     except Exception as e:
-        logger.warning(f"Solscan holder fetch failed for {token_address[:8]}: {e}")
+        logger.warning(f"Helius holder fetch failed for {token_address[:8]}: {e}")
 
     if data is None or data["total_holders"] == 0:
         try:
-            data = await asyncio.wait_for(_analyze_holders_helius(token_address), timeout=15)
-            sources_tried.append("helius")
+            data = await asyncio.wait_for(analyze_holders(token_address), timeout=10)
+            sources_tried.append("solscan")
         except Exception as e:
-            logger.warning(f"Helius holder fallback failed for {token_address[:8]}: {e}")
+            logger.warning(f"Solscan holder fallback failed for {token_address[:8]}: {e}")
 
     if data is None:
         logger.error(f"All holder sources failed for {token_address[:8]}")

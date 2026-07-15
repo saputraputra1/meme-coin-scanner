@@ -389,6 +389,10 @@ async def cmd_live(chat_id: str, args: str) -> str:
         try:
             while True:
                 cycle += 1
+                passed = []
+                skipped = []
+                logger.info(f"Cycle {cycle}: Starting analysis...")
+
                 if cycle % 5 == 0:
                     seen.clear()
                     logger.info(f"Cycle {cycle}: Reset seen set, re-scanning tokens")
@@ -485,7 +489,7 @@ async def cmd_live(chat_id: str, args: str) -> str:
                         await bot.send_message(chat_id=chat_id, text="\n".join(lines), parse_mode="Markdown", disable_web_page_preview=True)
                     except Exception as e:
                         logger.error(f"Verbose send error: {e}")
-                elif cycle % 5 == 0 or passed:
+                elif passed or cycle % 1 == 0:
                     heartbeat_emoji = "✅" if passed else "⏳"
                     lines = [f"{heartbeat_emoji} *Live Active* — Scan #{cycle}"]
                     if new_pairs:

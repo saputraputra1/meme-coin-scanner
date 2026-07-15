@@ -149,13 +149,16 @@ async def analyze_token(pair_data: dict) -> dict:
         result["professional"] = determine_signal(result)
         result["charts"] = await generate_charts_for_token(result)
 
-        try:
-            ai_result = await analyze_with_ai(result)
-            if ai_result and ai_result.get("signal"):
-                result["ai"] = ai_result
-                logger.info(f"AI analysis stored for {result.get('symbol', '???')}: {ai_result.get('signal')} conf={ai_result.get('confidence')}")
-        except Exception as e:
-            logger.warning(f"AI analysis failed for {result.get('symbol', '???')}: {e}")
+        total = result["score"]["total_score"]
+        pro_signal = result["professional"].get("signal", "")
+        if total >= 60 and pro_signal != "AVOID":
+            try:
+                ai_result = await analyze_with_ai(result)
+                if ai_result and ai_result.get("signal"):
+                    result["ai"] = ai_result
+                    logger.info(f"AI analysis stored for {result.get('symbol', '???')}: {ai_result.get('signal')} conf={ai_result.get('confidence')}")
+            except Exception as e:
+                logger.warning(f"AI analysis failed for {result.get('symbol', '???')}: {e}")
 
     return result
 

@@ -15,12 +15,14 @@ AI_MODEL = GROQ_MODEL
 _client: Optional[AsyncOpenAI] = None
 _ai_semaphore = asyncio.Semaphore(1)
 _last_ai_call = 0.0
+_consecutive_429 = 0
+_min_delay = 3.0
 
 
 def _get_client() -> AsyncOpenAI:
     global _client
     if _client is None:
-        _client = AsyncOpenAI(api_key=GROQ_API_KEY, base_url=GROQ_BASE_URL, timeout=60.0, max_retries=5)
+        _client = AsyncOpenAI(api_key=GROQ_API_KEY, base_url=GROQ_BASE_URL, timeout=60.0, max_retries=0)
     return _client
 
 
@@ -180,7 +182,7 @@ TRADE TYPE RULES:
 
 
 async def analyze_with_ai(token_data: Dict) -> Dict:
-    global _last_ai_call
+    global _last_ai_call, _consecutive_429, _min_delay
     if not GROQ_API_KEY:
         logger.warning("AI analyze skipped: no GROQ_API_KEY")
         return _fallback_response(token_data, "no_api_key")
@@ -190,8 +192,9 @@ async def analyze_with_ai(token_data: Dict) -> Dict:
     logger.info(f"AI analyzing {symbol}...")
 
     async with _ai_semaphore:
-        delay = 1.5 - (time.time() - _last_ai_call)
+        delay = _min_delay - (time.time() - _last_ai_call)
         if delay > 0:
+            logger.info(f"AI rate throttle: waiting {delay:.0f}s before {symbol}")
             await asyncio.sleep(delay)
 
         try:
@@ -204,6 +207,7 @@ async def analyze_with_ai(token_data: Dict) -> Dict:
                 seed=42,
             )
             _last_ai_call = time.time()
+            _consecutive_429 = 0
 
             content = ""
             reasoning_text = ""
@@ -236,10 +240,12 @@ async def analyze_with_ai(token_data: Dict) -> Dict:
             logger.info(f"AI result for {symbol}: {sig} conf={conf}/10")
             return parsed
 
-        except RateLimitError as e:
-            logger.warning(f"AI rate limited for {symbol}, using professional fallback")
+        except RateLimitError:
+            _consecutive_429 += 1
+            _min_delay = min(_min_delay * 2, 30.0)
             _last_ai_call = time.time()
-            return _fallback_response(token_data, f"rate_limited_{str(e)[:50]}")
+            logger.warning(f"AI 429 for {symbol} (x{_consecutive_429}), backoff {_min_delay:.0f}s")
+            return _fallback_response(token_data, "rate_limited")
         except Exception as e:
             logger.error(f"AI analyze error for {symbol}: {e}")
             _last_ai_call = time.time()

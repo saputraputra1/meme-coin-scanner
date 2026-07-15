@@ -258,7 +258,11 @@ async def handle_command(command: str, chat_id: str, args: str = "") -> str:
 
     handler = handlers.get(command)
     if handler:
-        return await handler(chat_id, args)
+        try:
+            return await handler(chat_id, args)
+        except Exception as e:
+            print(f"[Bot] Error in /{command}: {e}")
+            return f"Error processing /{command}: {str(e)[:200]}"
     return "Unknown command. Type /help for available commands."
 
 

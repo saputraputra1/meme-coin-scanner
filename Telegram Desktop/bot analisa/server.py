@@ -21,11 +21,38 @@ bot = None
 app_lifespan_started = False
 _auto_signal_task = None
 _position_monitor_task = None
+_poll_task = None
+
+
+async def _poll_updates():
+    last_update_id = 0
+    while True:
+        try:
+            updates = await bot.get_updates(offset=last_update_id + 1, timeout=30)
+            for update in updates:
+                last_update_id = update.update_id
+                if not update.message or not update.message.text:
+                    continue
+                text = update.message.text.strip()
+                chat = update.message.chat
+                chat_id = str(chat.id)
+                chat_name = chat.first_name or chat.title or "User"
+                logger.info(f"@{chat_name} ({chat_id}): {text}")
+                if text.startswith("/"):
+                    parts = text.split(maxsplit=1)
+                    cmd_part = parts[0][1:].lower().split("@")[0]
+                    args = parts[1] if len(parts) > 1 else ""
+                    asyncio.create_task(_process_command(cmd_part, chat_id, args, chat_name))
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Polling error: {e}")
+            await asyncio.sleep(5)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global bot, app_lifespan_started, _auto_signal_task
+    global bot, app_lifespan_started, _auto_signal_task, _poll_task
 
     logger.info("Starting Meme Coin Scanner Bot...")
     bot = create_bot(TELEGRAM_BOT_TOKEN)
@@ -38,8 +65,12 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"Failed to set webhook: {e}")
             logger.info("Falling back to polling mode")
+            _poll_task = asyncio.create_task(_poll_updates())
+            logger.info("Polling mode started (fallback)")
     else:
-        logger.info("No WEBHOOK_URL set, starting polling...")
+        logger.info("No WEBHOOK_URL set, starting polling mode...")
+        _poll_task = asyncio.create_task(_poll_updates())
+        logger.info("Polling mode started")
 
     try:
         commands = [
@@ -106,6 +137,8 @@ async def lifespan(app: FastAPI):
         _auto_signal_task.cancel()
     if _position_monitor_task:
         _position_monitor_task.cancel()
+    if _poll_task:
+        _poll_task.cancel()
     if bot and WEBHOOK_URL:
         try:
             await bot.delete_webhook()
@@ -176,14 +209,19 @@ async def webhook(request: Request):
 
 async def _process_command(cmd_part: str, chat_id: str, args: str, chat_name: str):
     try:
+        from alerts.telegram import send_loading, edit_message
+        loading_id = await send_loading(chat_id)
         reply = await handle_command(cmd_part, chat_id, args)
-        try:
-            await bot.send_message(chat_id=chat_id, text=reply, parse_mode="Markdown", disable_web_page_preview=True)
-        except Exception:
+        if loading_id:
+            await edit_message(chat_id, loading_id, reply)
+        else:
             try:
-                await bot.send_message(chat_id=chat_id, text=reply, disable_web_page_preview=True)
-            except Exception as e:
-                logger.error(f"Failed to send reply: {e}")
+                await bot.send_message(chat_id=chat_id, text=reply, parse_mode="Markdown", disable_web_page_preview=True)
+            except Exception:
+                try:
+                    await bot.send_message(chat_id=chat_id, text=reply, disable_web_page_preview=True)
+                except Exception as e:
+                    logger.error(f"Failed to send reply: {e}")
     except Exception as e:
         logger.error(f"Command error: {e}")
         try:

@@ -447,6 +447,9 @@ async def cmd_live(chat_id: str, args: str) -> str:
                     else:
                         skipped.append((symbol, total))
 
+                if passed:
+                    logger.info(f"Cycle {cycle}: {len(passed)} signals sent: {[s[0] for s in passed]}")
+
                 if verbose and new_pairs:
                     lines = [f"🔍 *Scan #{cycle}:* {len(new_pairs)} new tokens\n"]
                     for sym, sc in passed:
@@ -460,11 +463,18 @@ async def cmd_live(chat_id: str, args: str) -> str:
                         await bot.send_message(chat_id=chat_id, text="\n".join(lines), parse_mode="Markdown", disable_web_page_preview=True)
                     except Exception as e:
                         logger.error(f"Verbose send error: {e}")
-
-                if passed:
-                    logger.info(f"Cycle {cycle}: {len(passed)} signals sent: {[s[0] for s in passed]}")
-                else:
-                    logger.info(f"Cycle {cycle}: No signals (0/{len(new_pairs)} passed threshold)")
+                elif cycle % 5 == 0 or passed:
+                    heartbeat_emoji = "✅" if passed else "⏳"
+                    lines = [f"{heartbeat_emoji} *Live Active* — Scan #{cycle}"]
+                    if new_pairs:
+                        lines.append(f"Scanned: {len(new_pairs)} tokens | Passed: {len(passed)} | Skipped: {len(skipped)}")
+                    else:
+                        lines.append("No new tokens found this cycle")
+                    lines.append(f"Use `/live v` for detail, `/live` to stop")
+                    try:
+                        await bot.send_message(chat_id=chat_id, text="\n".join(lines), parse_mode="Markdown", disable_web_page_preview=True)
+                    except Exception as e:
+                        logger.error(f"Heartbeat send error: {e}")
 
                 await asyncio.sleep(60)
         except asyncio.CancelledError:

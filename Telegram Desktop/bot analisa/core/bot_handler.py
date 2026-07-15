@@ -40,7 +40,7 @@ from analyzers.holder import analyze_holder_distribution
 from analyzers.scorer import calculate_social_score, calculate_final_score
 from alerts.telegram import get_active_chat_ids, detect_new_chats
 from utils.telegram_client import create_bot
-from utils.export import export_csv
+from core.ai_analyzer import analyze_with_ai
 
 
 async def analyze_token(pair_data: dict) -> dict:
@@ -149,6 +149,13 @@ async def analyze_token(pair_data: dict) -> dict:
         result["professional"] = determine_signal(result)
         result["charts"] = generate_charts_for_token(result)
 
+        try:
+            ai_result = await analyze_with_ai(result)
+            if ai_result and ai_result.get("signal"):
+                result["ai"] = ai_result
+        except Exception:
+            pass
+
     return result
 
 
@@ -163,18 +170,27 @@ def format_telegram_message(result: Dict) -> str:
     social = details.get("social", {})
     age = result.get("age_minutes", "?")
     pro = result.get("professional", {})
+    ai = result.get("ai")
     deployer = result.get("deployer_check", {}).get("stats", {})
     bundler = result.get("bundler_check", {})
 
     mcap = liquidity.get("market_cap", 0)
     liq = liquidity.get("liquidity_usd", 0)
-    signal = pro.get("signal", "BUY")
-    signal_label = pro.get("signal_label", signal)
-    confidence = pro.get("confidence", "?")
-    position = pro.get("position_recommendation", "N/A")
-    concerns = pro.get("concerns", [])
-    positives = pro.get("positives", [])
-    summary = pro.get("summary", "")
+    if ai:
+        signal = ai.get("signal", pro.get("signal", "BUY"))
+        confidence = ai.get("confidence", pro.get("confidence", "?"))
+        concerns = ai.get("key_risks", pro.get("concerns", []))
+        positives = ai.get("key_strengths", pro.get("positives", []))
+        summary = ai.get("reasoning", pro.get("summary", ""))
+        position = ai.get("position_size", pro.get("position_recommendation", "N/A"))
+    else:
+        signal = pro.get("signal", "BUY")
+        confidence = pro.get("confidence", "?")
+        concerns = pro.get("concerns", [])
+        positives = pro.get("positives", [])
+        summary = pro.get("summary", "")
+        position = pro.get("position_recommendation", "N/A")
+    signal_label = signal.replace("_", " ")
 
     sig_emoji = {"STRONG_BUY": "🔥", "BUY": "🟢", "WATCH": "🟡", "AVOID": "🔴"}.get(signal, "❓")
 
@@ -455,43 +471,44 @@ async def cmd_live(chat_id: str, args: str) -> str:
 
                     total = analyzed["score"]["total_score"]
                     symbol = analyzed.get("symbol", "???")
+                    ai = analyzed.get("ai")
                     pro = analyzed.get("professional", {})
-                    signal = pro.get("signal", "?")
-                    logger.info(f"Analyzed {symbol}: score={total} signal={signal} liq=${liq:.0f} vol=${vol:.0f}")
+                    signal = (ai or pro).get("signal", "?")
+                    logger.info(f"Analyzed {symbol}: score={total} signal={signal} liq=${liq:.0f} vol=${vol:.0f} ai={'yes' if ai else 'no'}")
 
                     if total >= MIN_SCORE_FOR_ALERT and signal in ("STRONG_BUY", "BUY", "WATCH"):
                         passed.append((symbol, total, signal))
-                        msg = format_telegram_message(analyzed)
-                        from alerts.telegram import get_active_chat_ids
+                        from alerts.telegram import get_active_chat_ids, send_ai_signal
                         chat_ids = get_active_chat_ids()
                         if chat_id not in chat_ids:
                             chat_ids.append(chat_id)
-                        for cid in chat_ids:
-                            try:
-                                await bot.send_message(chat_id=cid, text=msg, parse_mode="Markdown", disable_web_page_preview=True)
-                            except Exception as e:
-                                logger.error(f"Live send error to {cid}: {e}")
-                        logger.info(f"Score alert broadcast: {symbol} score={total} signal={signal} to {len(chat_ids)} chats")
-
-                        if total >= LIVE_AI_MIN_SCORE and analyzed.get("liquidity_usd", 0) >= MIN_LIQUIDITY:
-                            try:
-                                from core.ai_analyzer import analyze_with_ai
-                                ai_result = await analyze_with_ai(analyzed)
-                                sig = ai_result.get("signal")
-                                conf = ai_result.get("confidence", 0)
-                                risk = ai_result.get("risk_level", "medium")
-                                ttype = ai_result.get("trade_type", "SCALP")
-                                if (
-                                    sig in ("STRONG_BUY", "BUY")
-                                    and isinstance(conf, (int, float)) and conf >= MIN_AI_CONFIDENCE
-                                    and risk != "high"
-                                    and ttype in ("HOLD", "SCALP+HOLD")
-                                ):
-                                    from alerts.telegram import send_ai_signal
-                                    await send_ai_signal(analyzed, ai_result)
-                                    logger.info(f"AI signal sent: {symbol} {sig} conf={conf}")
-                            except Exception as e:
-                                logger.error(f"AI analysis error for {symbol}: {e}")
+                        if ai:
+                            sig = ai.get("signal")
+                            conf = ai.get("confidence", 0)
+                            risk = ai.get("risk_level", "medium")
+                            if sig in ("STRONG_BUY", "BUY") and isinstance(conf, (int, float)) and conf >= MIN_AI_CONFIDENCE and risk != "high":
+                                for cid in chat_ids:
+                                    try:
+                                        await send_ai_signal(analyzed, ai, cid)
+                                    except Exception as e:
+                                        logger.error(f"Live AI send error to {cid}: {e}")
+                                logger.info(f"AI signal sent: {symbol} {sig} conf={conf} to {len(chat_ids)} chats")
+                            else:
+                                msg = format_telegram_message(analyzed)
+                                for cid in chat_ids:
+                                    try:
+                                        await bot.send_message(chat_id=cid, text=msg, parse_mode="Markdown", disable_web_page_preview=True)
+                                    except Exception as e:
+                                        logger.error(f"Live send error to {cid}: {e}")
+                                logger.info(f"Score alert broadcast: {symbol} score={total} signal={signal} to {len(chat_ids)} chats (AI={sig} filtered)")
+                        else:
+                            msg = format_telegram_message(analyzed)
+                            for cid in chat_ids:
+                                try:
+                                    await bot.send_message(chat_id=cid, text=msg, parse_mode="Markdown", disable_web_page_preview=True)
+                                except Exception as e:
+                                    logger.error(f"Live send error to {cid}: {e}")
+                            logger.info(f"Score alert broadcast: {symbol} score={total} signal={signal} to {len(chat_ids)} chats")
                     else:
                         skipped.append((symbol, total, signal))
 

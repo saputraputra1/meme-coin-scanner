@@ -251,7 +251,7 @@ async def edit_message(chat_id: str, message_id: int, new_text: str):
         logger.error(f"Edit message error: {e}")
 
 
-async def send_ai_signal(result: Dict, ai_result: Dict):
+async def send_ai_signal(result: Dict, ai_result: Dict, chat_id: str = None):
     if not TELEGRAM_BOT_TOKEN:
         return
 
@@ -360,10 +360,13 @@ async def send_ai_signal(result: Dict, ai_result: Dict):
         if url:
             msg += f" | [DexScreener]({url})"
 
-        chat_ids = get_active_chat_ids()
-        if not chat_ids:
-            logger.warning("send_ai_signal: no active chat_ids to send to (bot has no linked chats yet)")
-        for cid in chat_ids:
+        if chat_id:
+            cids = [chat_id]
+        else:
+            cids = get_active_chat_ids()
+            if not cids:
+                logger.warning("send_ai_signal: no active chat_ids to send to")
+        for cid in cids:
             asyncio.create_task(_send_telegram_alert(bot, cid, msg))
 
     except Exception as e:

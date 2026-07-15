@@ -2,21 +2,9 @@ import asyncio
 import json
 import urllib.parse
 from typing import Dict, List
-import httpx
 
 
 async def _shorten_chart_url(chart_config: dict, width: int, height: int) -> str:
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(
-                "https://quickchart.io/v1/chart/create",
-                json={"chart": chart_config, "width": width, "height": height},
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                return data.get("url", "")
-    except Exception:
-        pass
     return ""
 
 

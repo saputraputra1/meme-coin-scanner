@@ -1255,7 +1255,7 @@ async def cmd_gem_hunter(chat_id: str, args: str) -> str:
         if chart_link:
             line += f" | [Chart]({chart_link})"
         if g.get("url"):
-            line += f" | [DexScreener]({g['url']}")"
+            line += f" | [DexScreener]({g['url']})"
 
         holders_data = g["score"]["details"].get("holders", {})
         top_holders = holders_data.get("top_holders", [])

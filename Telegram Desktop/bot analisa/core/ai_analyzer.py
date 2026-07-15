@@ -198,9 +198,10 @@ async def analyze_with_ai(token_data: Dict) -> Dict:
             response = await client.chat.completions.create(
                 model=NVIDIA_MODEL,
                 messages=[{"role": "user", "content": _build_structured_prompt(token_data)}],
-                temperature=0.3,
+                temperature=1,
                 top_p=1,
-                max_tokens=2000,
+                max_tokens=8192,
+                seed=42,
             )
             _last_ai_call = time.time()
 

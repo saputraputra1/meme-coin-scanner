@@ -563,17 +563,24 @@ help - Bantuan perintah
                     cmd_part = parts[0][1:].lower().split("@")[0]
                     args = parts[1] if len(parts) > 1 else ""
 
+                    from alerts.telegram import send_loading, edit_message
+                    loading_id = await send_loading(chat_id)
+
                     reply = await handle_command(cmd_part, chat_id, args)
-                    try:
-                        await bot.send_message(
-                            chat_id=chat_id, text=reply,
-                            parse_mode="Markdown", disable_web_page_preview=True
-                        )
-                    except Exception:
+
+                    if loading_id:
+                        await edit_message(chat_id, loading_id, reply)
+                    else:
                         try:
-                            await bot.send_message(chat_id=chat_id, text=reply, disable_web_page_preview=True)
+                            await bot.send_message(
+                                chat_id=chat_id, text=reply,
+                                parse_mode="Markdown", disable_web_page_preview=True
+                            )
                         except Exception:
-                            pass
+                            try:
+                                await bot.send_message(chat_id=chat_id, text=reply, disable_web_page_preview=True)
+                            except Exception:
+                                pass
 
         except asyncio.CancelledError:
             break

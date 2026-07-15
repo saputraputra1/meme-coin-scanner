@@ -213,9 +213,6 @@ async def _send_telegram_alert(bot, chat_id: str, message: str):
         try:
             await bot.send_message(chat_id=chat_id, text=message, parse_mode="Markdown", disable_web_page_preview=True)
         except TelegramError as e:
-            # Markdown parse failures used to silently drop the alert with no
-            # trace. Log it, and retry once as plain text so the user still
-            # gets the signal even if formatting is imperfect.
             logger.warning(f"Telegram send failed for chat {chat_id} with Markdown ({e}); retrying as plain text")
             try:
                 await bot.send_message(chat_id=chat_id, text=message, disable_web_page_preview=True)
@@ -223,6 +220,34 @@ async def _send_telegram_alert(bot, chat_id: str, message: str):
                 logger.error(f"Telegram send failed for chat {chat_id} even as plain text: {e2}")
     except Exception as e:
         logger.error(f"Unexpected error sending Telegram alert to {chat_id}: {e}")
+
+
+async def send_loading(chat_id: str, text: str = "⏳ Memproses...") -> int | None:
+    if not TELEGRAM_BOT_TOKEN:
+        return None
+    try:
+        bot = create_bot(TELEGRAM_BOT_TOKEN)
+        msg = await bot.send_message(chat_id=chat_id, text=text, disable_web_page_preview=True)
+        return msg.message_id
+    except Exception:
+        return None
+
+
+async def edit_message(chat_id: str, message_id: int, new_text: str):
+    if not TELEGRAM_BOT_TOKEN:
+        return
+    try:
+        from telegram.error import TelegramError
+        bot = create_bot(TELEGRAM_BOT_TOKEN)
+        try:
+            await bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=new_text, parse_mode="Markdown", disable_web_page_preview=True)
+        except TelegramError:
+            try:
+                await bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=new_text, disable_web_page_preview=True)
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 async def send_ai_signal(result: Dict, ai_result: Dict):

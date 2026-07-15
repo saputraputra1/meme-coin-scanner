@@ -2,10 +2,10 @@ import json
 import re
 from typing import Dict, Optional
 from openai import AsyncOpenAI
-from config import MIMO_API_KEY
+from config import NVIDIA_API_KEY
 
-MIMO_BASE_URL = "https://api.xiaomimimo.com/v1"
-MIMO_MODEL = "mimo-v2.5-pro"
+NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
+NVIDIA_MODEL = "z-ai/glm-5.2"
 
 _client: Optional[AsyncOpenAI] = None
 
@@ -13,7 +13,7 @@ _client: Optional[AsyncOpenAI] = None
 def _get_client() -> AsyncOpenAI:
     global _client
     if _client is None:
-        _client = AsyncOpenAI(api_key=MIMO_API_KEY, base_url=MIMO_BASE_URL, timeout=30.0)
+        _client = AsyncOpenAI(api_key=NVIDIA_API_KEY, base_url=NVIDIA_BASE_URL, timeout=30.0)
     return _client
 
 
@@ -160,18 +160,18 @@ Respond with ONLY a single JSON object, no markdown fences, no extra text before
 
 
 async def analyze_with_ai(token_data: Dict) -> Dict:
-    if not MIMO_API_KEY:
+    if not NVIDIA_API_KEY:
         return _fallback_response(token_data, "no_api_key")
 
     client = _get_client()
 
     try:
         response = await client.chat.completions.create(
-            model=MIMO_MODEL,
+            model=NVIDIA_MODEL,
             messages=[{"role": "user", "content": _build_structured_prompt(token_data)}],
-            extra_body={"max_completion_tokens": 2000},
-            max_tokens=2000,
             temperature=0.3,
+            top_p=1,
+            max_tokens=2000,
         )
 
         content = ""

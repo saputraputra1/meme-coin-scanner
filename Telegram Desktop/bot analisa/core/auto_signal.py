@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, List
 
-from config import MIMO_API_KEY, MIN_SCORE_FOR_ALERT
+from config import NVIDIA_API_KEY, MIN_SCORE_FOR_ALERT
 
 logger = logging.getLogger("memecoin-bot")
 

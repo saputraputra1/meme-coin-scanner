@@ -246,12 +246,15 @@ async def send_ai_signal(result: Dict, ai_result: Dict):
         signal = ai_result.get("signal", "BUY")
         confidence = ai_result.get("confidence", "?")
         reasoning = _escape_markdown(ai_result.get("reasoning", ""))
+        trade_type = ai_result.get("trade_type", "SCALP")
+        trade_type_reason = _escape_markdown(ai_result.get("trade_type_reason", ""))
         target = _escape_markdown(str(ai_result.get("target_price_pct", "N/A")))
         stop_loss = _escape_markdown(str(ai_result.get("stop_loss_pct", "N/A")))
         risk = ai_result.get("risk_level", "medium")
         position = _escape_markdown(str(ai_result.get("position_size", "1-3%")))
         strengths = ai_result.get("key_strengths", [])
         risks = ai_result.get("key_risks", [])
+        hold_duration = _escape_markdown(str(ai_result.get("hold_duration", "N/A")))
         source = ai_result.get("source", "ai")
 
         sig_emoji = {"STRONG_BUY": "🔥", "BUY": "🟢", "WATCH": "🟡", "AVOID": "🔴"}.get(signal, "❓")
@@ -259,28 +262,62 @@ async def send_ai_signal(result: Dict, ai_result: Dict):
 
         pc_emoji = "📈" if price_ch > 0 else "📉"
 
+        trade_emoji = {"HOLD": "💎", "SCALP": "⚡️", "SCALP+HOLD": "⚡️💎", "SKIP": "🚫"}.get(trade_type, "❓")
+        trade_label = {"HOLD": "HOLD", "SCALP": "SCALP", "SCALP+HOLD": "SCALP+HOLD", "SKIP": "SKIP"}.get(trade_type, trade_type)
+
+        safety = result.get("score", {}).get("details", {}).get("safety", {})
+        checks = safety.get("checks", {})
+        holders = result.get("score", {}).get("details", {}).get("holders", {})
+        liquidity = result.get("score", {}).get("details", {}).get("liquidity", {})
+
+        mint = "✅" if checks.get("mint_authority") is True else "⚠️" if checks.get("mint_authority") is False else "❓"
+        freeze = "✅" if checks.get("freeze_authority") is True else "⚠️" if checks.get("freeze_authority") is False else "❓"
+        hp = checks.get("honeypot_detected", "?")
+        hp_text = "🛑 YES" if hp is True else "✅ No" if hp is False else "❓"
+        holder_total = holders.get("total_holders", "?")
+        top10 = holders.get("top10_concentration_pct", "?")
+        top10_str = f"{top10:.0f}%" if isinstance(top10, (int, float)) else "?"
+
         msg = (
-            f"{sig_emoji} {source_label} *SIGNAL: ${symbol} — {signal} ({confidence}/10)*\n"
-            f"*{name}*\n"
-            f"{'─' * 25}\n"
-            f"💡 *AI Analysis:*\n"
-            f"_{reasoning}_\n"
-            f"{'─' * 25}\n"
-            f"📊 Score: {score}/100 | 💰 ${mcap:,.0f} MCap | ${liq:,.0f} Liq\n"
-            f"💵 Price: ${price:.8f} | {pc_emoji} {price_ch:+.0f}%\n"
-            f"🎯 Target: {target} | 🛑 Stop: {stop_loss}\n"
-            f"⚡ Risk: {risk} | 📦 Position: {position}\n"
+            f"{sig_emoji} *{signal}* {trade_emoji} *{trade_label}*\n"
+            f"*${symbol}* — {name}\n"
+            f"{'─' * 28}\n"
         )
 
-        if strengths:
-            msg += f"✅ {', '.join(strengths[:2])}\n"
-        if risks:
-            msg += f"⚠️ {', '.join(risks[:2])}\n"
+        msg += (
+            f"📊 Score: {score}/100 | Confidence: {confidence}/10\n"
+            f"💰 MCap: ${mcap:,.0f} | Liq: ${liq:,.0f}\n"
+            f"💵 Price: ${price:.8f} | {pc_emoji} {price_ch:+.0f}%\n"
+            f"🔒 Mint: {mint} | Freeze: {freeze} | HP: {hp_text}\n"
+            f"👥 Holders: {holder_total} | Top10: {top10_str}\n"
+            f"{'─' * 28}\n"
+        )
 
-        holders = result.get("score", {}).get("details", {}).get("holders", {})
-        top_holders = holders.get("top_holders", [])
+        msg += f"💡 *Analisa AI:*\n_{reasoning}_\n{'─' * 28}\n"
+
+        if trade_type_reason:
+            msg += f"📌 *Rekomendasi:* {trade_emoji} {trade_label}\n_{trade_type_reason}_\n"
+            if hold_duration and hold_duration != "N/A":
+                msg += f"⏱️ Durasi: {hold_duration}\n"
+            msg += f"{'─' * 28}\n"
+
+        if strengths:
+            msg += f"✅ *Kelebihan:*\n"
+            for s in strengths[:5]:
+                msg += f"  • {_escape_markdown(s)}\n"
+        if risks:
+            msg += f"⚠️ *Risiko:*\n"
+            for r in risks[:5]:
+                msg += f"  • {_escape_markdown(r)}\n"
+
+        msg += f"{'─' * 28}\n"
+        msg += f"🎯 Target: {target} | 🛑 Stop: {stop_loss}\n"
+        msg += f"⚡ Risk: {risk} | 📦 Position: {position}\n"
+
+        holders_data = result.get("score", {}).get("details", {}).get("holders", {})
+        top_holders = holders_data.get("top_holders", [])
         if top_holders:
-            msg += f"\n👥 Top Holders:\n"
+            msg += f"\n👥 *Top Holders:*\n"
             for i, h in enumerate(top_holders[:10], 1):
                 addr = h.get("address", "?")
                 pct = h.get("pct", 0)
@@ -290,7 +327,7 @@ async def send_ai_signal(result: Dict, ai_result: Dict):
                 msg += f"  {i}. {whale} {pct:.1f}% — [{short}]({link})\n"
 
         age_str = f"{age:.0f}m" if isinstance(age, (int, float)) else str(age)
-        msg += f"⏱️ {age_str}"
+        msg += f"\n⏱️ {age_str}"
 
         if charts.get("price_chart"):
             msg += f" | [Chart]({charts['price_chart']})"

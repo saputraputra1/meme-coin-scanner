@@ -151,12 +151,23 @@ Respond with ONLY a single JSON object, no markdown fences, no extra text before
 {{
   "signal": "STRONG_BUY" | "BUY" | "WATCH" | "AVOID",
   "confidence": <integer 1-10>,
-  "reasoning": "<2-3 sentences in Indonesian>",
+  "reasoning": "<3-5 kalimat dalam Bahasa Indonesia. Jelaskan: (1) Mengapa koin ini layak beli? (2) Apa keamanannya? (3) Bagaimana likuiditas dan holder? (4) Apa risiko utama?>",
+  "trade_type": "HOLD" | "SCALP" | "SCALP+HOLD" | "SKIP",
+  "trade_type_reason": "<1-2 kalimat: mengapa cocok untuk hold/scalping>",
+  "key_strengths": ["<strength1>", "<strength2>", "<strength3>"],
+  "key_risks": ["<risk1>", "<risk2>"],
   "target_price_pct": "<e.g. +80%>",
   "stop_loss_pct": "<e.g. -40%>",
   "risk_level": "low" | "medium" | "high",
-  "position_size": "<e.g. 1-3% portfolio, or SKIP>"
-}}"""
+  "position_size": "<e.g. 1-3% portfolio, or SKIP>",
+  "hold_duration": "<e.g. 1-7 hari / beberapa jam / beberapa minggu>"
+}}
+
+TRADE TYPE RULES:
+- HOLD: Fundamental bagus, holder tersebar, deployer trusted, aman untuk jangka panjang (hari-minggu)
+- SCALP: Momentum cepat tapi risiko tinggi (holder concentrated, token sangat baru), ambil profit cepat (menit-jam)
+- SCALP+HOLD: Momentum kuat + fundamental oke, bisa scalp dulu lalu hold sisa
+- SKIP: Terlalu berbahaya, jangan beli"""
 
     return prompt
 
@@ -253,16 +264,38 @@ def _parse_json_response(text: str) -> Optional[Dict]:
     if risk_level not in _VALID_RISK:
         risk_level = "medium"
 
-    reasoning = str(data.get("reasoning", "") or "")[:300]
+    reasoning = str(data.get("reasoning", "") or "")[:500]
+
+    trade_type = str(data.get("trade_type", "SCALP")).strip().upper()
+    if trade_type not in ("HOLD", "SCALP", "SCALP+HOLD", "SKIP"):
+        trade_type = "SCALP"
+    trade_type_reason = str(data.get("trade_type_reason", "") or "")[:200]
+
+    key_strengths = data.get("key_strengths", [])
+    if not isinstance(key_strengths, list):
+        key_strengths = []
+    key_strengths = [str(s) for s in key_strengths[:5]]
+
+    key_risks = data.get("key_risks", [])
+    if not isinstance(key_risks, list):
+        key_risks = []
+    key_risks = [str(r) for r in key_risks[:5]]
+
+    hold_duration = str(data.get("hold_duration", "N/A") or "N/A")[:50]
 
     return {
         "signal": signal,
         "confidence": confidence,
         "reasoning": reasoning,
+        "trade_type": trade_type,
+        "trade_type_reason": trade_type_reason,
+        "key_strengths": key_strengths,
+        "key_risks": key_risks,
         "target_price_pct": str(data.get("target_price_pct", "N/A")),
         "stop_loss_pct": str(data.get("stop_loss_pct", "N/A")),
         "risk_level": risk_level,
         "position_size": str(data.get("position_size", "1-3% portfolio")),
+        "hold_duration": hold_duration,
         "source": "ai",
     }
 
@@ -332,11 +365,16 @@ def _parse_text_response(text: str, token_data: Dict) -> Dict:
     return {
         "signal": signal,
         "confidence": confidence,
-        "reasoning": reasoning[:300],
+        "reasoning": reasoning[:500],
+        "trade_type": "SCALP",
+        "trade_type_reason": "Data tidak lengkap untuk analisa mendalam",
+        "key_strengths": [],
+        "key_risks": [],
         "target_price_pct": target,
         "stop_loss_pct": stop_loss,
         "risk_level": risk_level,
         "position_size": position,
+        "hold_duration": "N/A",
         "source": "ai",
     }
 
@@ -478,10 +516,15 @@ def _fallback_response(token_data: Dict, error: str = "") -> Dict:
         "signal": signal,
         "confidence": confidence,
         "reasoning": f"Score: {token_data.get('score', {}).get('total_score', 0)}/100. {len(pro.get('positives', []))} strengths, {len(pro.get('concerns', []))} concerns." + (f" (Error: {error})" if error else ""),
+        "trade_type": "SCALP",
+        "trade_type_reason": "Analisa engine, bukan AI",
+        "key_strengths": pro.get("positives", [])[:3],
+        "key_risks": pro.get("concerns", [])[:3],
         "target_price_pct": defaults["target"],
         "stop_loss_pct": defaults["stop"],
         "risk_level": "medium",
         "position_size": pro.get("position_recommendation", "1-3% portfolio"),
+        "hold_duration": "N/A",
         "source": "fallback" if error else "engine",
         "data_quality": 0,
     }

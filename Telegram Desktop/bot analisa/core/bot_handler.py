@@ -377,6 +377,13 @@ async def cmd_live(chat_id: str, args: str) -> str:
         del _live_tasks[chat_id]
         return "⏹️ Live monitoring stopped."
 
+    from alerts.telegram import _auto_chats, _save_auto_chats, _load_auto_chats
+    _load_auto_chats()
+    if chat_id not in _auto_chats:
+        _auto_chats.add(chat_id)
+        _save_auto_chats()
+        logger.info(f"Auto-registered chat {chat_id} for live alerts")
+
     verbose = args.strip().lower() in ("v", "verbose", "debug")
 
     from telegram import Bot
@@ -452,6 +459,8 @@ async def cmd_live(chat_id: str, args: str) -> str:
                         msg = format_telegram_message(analyzed)
                         from alerts.telegram import get_active_chat_ids
                         chat_ids = get_active_chat_ids()
+                        if chat_id not in chat_ids:
+                            chat_ids.append(chat_id)
                         for cid in chat_ids:
                             try:
                                 await bot.send_message(chat_id=cid, text=msg, parse_mode="Markdown", disable_web_page_preview=True)

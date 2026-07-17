@@ -112,7 +112,7 @@ def determine_signal(result: Dict) -> Dict:
         positives.append(f"Narratives: {narratives}")
 
     safe_buy = safety_score >= 75 and not concerns
-    if is_honeypot is True or not can_swap:
+    if is_honeypot is True:
         signal = "AVOID"
         signal_label = "AVOID"
     elif safety_score >= 80 and len(concerns) == 0 and len(positives) >= 3:

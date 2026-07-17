@@ -544,17 +544,17 @@ def _fallback_response(token_data: Dict, error: str = "") -> Dict:
         confidence = 5
 
     signal_map = {
-        "STRONG_BUY": {"target": "+120%", "stop": "-30%"},
-        "BUY": {"target": "+80%", "stop": "-40%"},
-        "WATCH": {"target": "+40%", "stop": "-50%"},
-        "AVOID": {"target": "N/A", "stop": "N/A"},
+        "STRONG_BUY": {"target": "+120%", "stop": "-30%", "size": "3-5% portfolio"},
+        "BUY": {"target": "+80%", "stop": "-40%", "size": "2-3% portfolio"},
+        "WATCH": {"target": "+40%", "stop": "-50%", "size": "1% portfolio"},
+        "AVOID": {"target": "N/A", "stop": "N/A", "size": "SKIP"},
     }
     defaults = signal_map.get(signal, signal_map["WATCH"])
 
     return {
         "signal": signal,
         "confidence": confidence,
-        "reasoning": f"Score: {token_data.get('score', {}).get('total_score', 0)}/100. {len(pro.get('positives', []))} strengths, {len(pro.get('concerns', []))} concerns." + (f" (Error: {error})" if error else ""),
+        "reasoning": f"Score: {token_data.get('score', {}).get('total_score', 0)}/100. {len(pro.get('positives', []))} strengths, {len(pro.get('concerns', []))} concerns." + (f" (Analisa engine, AI tidak tersedia)" if error else ""),
         "trade_type": "SCALP",
         "trade_type_reason": "Analisa engine, bukan AI",
         "key_strengths": pro.get("positives", [])[:3],
@@ -562,7 +562,7 @@ def _fallback_response(token_data: Dict, error: str = "") -> Dict:
         "target_price_pct": defaults["target"],
         "stop_loss_pct": defaults["stop"],
         "risk_level": "medium",
-        "position_size": pro.get("position_recommendation", "1-3% portfolio"),
+        "position_size": defaults["size"],
         "hold_duration": "N/A",
         "source": "fallback" if error else "engine",
         "data_quality": 0,

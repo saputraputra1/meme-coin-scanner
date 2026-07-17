@@ -45,6 +45,11 @@ def determine_signal(result: Dict) -> Dict:
     sm_risk = sm.get("risk", "unknown")
     narratives = ", ".join(result.get("narratives", []) or [])
 
+    whales = result.get("auto_whales", {})
+    whale_pct = whales.get("total_whale_supply_pct", 0)
+    whale_count = whales.get("whale_count", 0)
+    whale_risk = whales.get("concentration_risk", "unknown")
+
     concerns = []
     positives = []
 
@@ -60,6 +65,10 @@ def determine_signal(result: Dict) -> Dict:
         concerns.append("Cannot trade")
     if isinstance(top10, (int, float)) and top10 > 60:
         concerns.append("Holder concentrated")
+    if isinstance(top10, (int, float)) and top10 > 85:
+        concerns.append("Extreme holder concentration")
+    if whale_risk == "high":
+        concerns.append("Whale-dominated supply")
     if holder_total == "?" or holder_total == 0:
         concerns.append("Holder data unavailable — high rug risk")
     if isinstance(mcap, (int, float)) and mcap < 3000:
@@ -89,6 +98,10 @@ def determine_signal(result: Dict) -> Dict:
         positives.append("Active trading")
     if isinstance(price_change, (int, float)) and price_change > 50:
         positives.append("Strong momentum")
+    if isinstance(price_change, (int, float)) and price_change > 500 and isinstance(liq, (int, float)) and liq < 50000:
+        concerns.append("Suspicious pump — low liquidity")
+    if isinstance(price_change, (int, float)) and price_change > 2000:
+        concerns.append("Extreme pump — high rug risk")
     if social_links and len(social_links) >= 2:
         positives.append("Active social media")
     if not is_bundled and age < 30:
@@ -99,7 +112,10 @@ def determine_signal(result: Dict) -> Dict:
         positives.append(f"Narratives: {narratives}")
 
     safe_buy = safety_score >= 75 and not concerns
-    if safety_score >= 80 and len(concerns) == 0 and len(positives) >= 3:
+    if is_honeypot is True or not can_swap:
+        signal = "AVOID"
+        signal_label = "AVOID"
+    elif safety_score >= 80 and len(concerns) == 0 and len(positives) >= 3:
         signal = "STRONG_BUY"
         signal_label = "STRONG BUY"
     elif safety_score >= 60 and len(concerns) <= 1:

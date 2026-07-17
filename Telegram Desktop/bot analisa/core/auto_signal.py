@@ -13,9 +13,9 @@ SIGNALS_FILE = Path(__file__).parent.parent / "data" / "signals_history.json"
 SENT_FILE = Path(__file__).parent.parent / "data" / "sent_tokens.json"
 PENDING_FILE = Path(__file__).parent.parent / "data" / "pending_signals.json"
 
-AUTO_SIGNAL_INTERVAL = 300
+AUTO_SIGNAL_INTERVAL = 120
 AUTO_SIGNAL_MAX_PER_CYCLE = 3
-AUTO_SIGNAL_MIN_SCORE = 70
+AUTO_SIGNAL_MIN_SCORE = 60
 AUTO_SIGNAL_COOLDOWN = 3600
 
 # Fix: previously only the top (MAX_PER_CYCLE * 2) = 6 scored tokens were
@@ -23,7 +23,7 @@ AUTO_SIGNAL_COOLDOWN = 3600
 # dropped forever, every cycle, regardless of how good it was. This raises
 # how many qualifying tokens get analyzed per cycle. Higher = fewer missed
 # signals during busy markets, but more MiMo API calls/cost per cycle.
-AUTO_SIGNAL_ANALYSIS_LIMIT = 15
+AUTO_SIGNAL_ANALYSIS_LIMIT = 20
 
 # How long a confirmed BUY/STRONG_BUY signal is allowed to sit in the queue
 # waiting for send-cap room before we consider its price data too stale to

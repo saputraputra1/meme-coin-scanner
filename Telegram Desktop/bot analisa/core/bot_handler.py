@@ -1498,11 +1498,11 @@ async def cmd_gem_hunter(chat_id: str, args: str) -> str:
         vol = pair.get("volume_24h", 0)
         age = pair.get("age_minutes", 0)
 
-        if mcap < 500 or mcap > 100000:
+        if mcap < 500 or mcap > 500000:
             continue
         if liq < 1000:
             continue
-        if age > 60 and age > 0:
+        if age > 90 and age > 0:
             continue
 
         analyzed = await analyze_token(pair)
@@ -1537,7 +1537,7 @@ async def cmd_gem_hunter(chat_id: str, args: str) -> str:
         return "Tidak ada gem ditemukan saat ini. Coba lagi nanti."
 
     lines = ["*GEM HUNTER Results*\n"]
-    lines.append("Kriteria: MCap <$100K, Age <60m, Safety >50, No honeypot, Vol/MCap >0.1\n")
+    lines.append("Kriteria: MCap <$500K, Age <90m, Safety >50, No honeypot, Vol/MCap >0.1\n")
 
     for i, g in enumerate(gems):
         gem_score = g.get("gem_score", 0)
@@ -1593,19 +1593,21 @@ def _calculate_gem_score(result: Dict, vol_mcap_ratio: float) -> int:
     mcap = result.get("market_cap", 0)
     if mcap < 10000:
         score += 25
-    elif mcap < 30000:
-        score += 20
     elif mcap < 50000:
+        score += 20
+    elif mcap < 200000:
         score += 15
+    elif mcap < 500000:
+        score += 10
     else:
         score += 5
 
     age = result.get("age_minutes", 999)
-    if age < 5:
+    if age < 10:
         score += 20
-    elif age < 15:
-        score += 15
     elif age < 30:
+        score += 15
+    elif age < 60:
         score += 10
     else:
         score += 5
@@ -1623,6 +1625,14 @@ def _calculate_gem_score(result: Dict, vol_mcap_ratio: float) -> int:
     elif vol_mcap_ratio >= 1:
         score += 10
     elif vol_mcap_ratio >= 0.5:
+        score += 5
+
+    price_ch = result.get("price_change_24h", 0) or 0
+    if price_ch > 500:
+        score += 15
+    elif price_ch > 200:
+        score += 10
+    elif price_ch > 50:
         score += 5
 
     deployer = result.get("deployer_check", {}).get("stats", {})

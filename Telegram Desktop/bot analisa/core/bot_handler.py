@@ -414,12 +414,12 @@ async def cmd_live(chat_id: str, args: str) -> str:
     from telegram import Bot
     bot = create_bot(TELEGRAM_BOT_TOKEN)
 
+    LIVE_MIN_SCORE = 65
+    MIN_AI_CONFIDENCE = 5
+    PRE_FILTER_LIQUIDITY = 300
+    PRE_FILTER_VOLUME = 500
+
     async def live_loop():
-        LIVE_AI_MIN_SCORE = 80
-        MIN_LIQUIDITY = 5000
-        MIN_AI_CONFIDENCE = 6
-        PRE_FILTER_LIQUIDITY = 500
-        PRE_FILTER_VOLUME = 1000
         seen = set()
         cycle = 0
         logger.info(f"Live loop started for chat {chat_id} (verbose={verbose})")
@@ -480,7 +480,7 @@ async def cmd_live(chat_id: str, args: str) -> str:
                     signal = (ai or pro).get("signal", "?")
                     logger.info(f"Analyzed {symbol}: score={total} signal={signal} liq=${liq:.0f} vol=${vol:.0f} ai={'yes' if ai else 'no'}")
 
-                    if total >= MIN_SCORE_FOR_ALERT and signal in ("STRONG_BUY", "BUY", "WATCH"):
+                    if total >= LIVE_MIN_SCORE and signal in ("STRONG_BUY", "BUY", "WATCH"):
                         passed.append((symbol, total, signal))
                         from alerts.telegram import get_active_chat_ids, send_ai_signal
                         chat_ids = get_active_chat_ids()
@@ -554,7 +554,7 @@ async def cmd_live(chat_id: str, args: str) -> str:
 
     _live_tasks[chat_id] = asyncio.create_task(live_loop())
     mode = "verbose" if verbose else "normal"
-    return f"▶️ Live monitoring started ({mode}, interval 60s, 4 sources, min score >{MIN_SCORE_FOR_ALERT}).\nUse `/live v` for verbose mode. `/live` to stop."
+    return f"▶️ Live monitoring started ({mode}, interval 60s, 4 sources, min score >{LIVE_MIN_SCORE}).\nUse `/live v` for verbose mode. `/live` to stop."
 
 
 async def cmd_pumpfun(chat_id: str, args: str) -> str:
